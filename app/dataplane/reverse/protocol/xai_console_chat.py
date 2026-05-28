@@ -35,6 +35,7 @@ import orjson
 from app.platform.errors import UpstreamError
 from app.platform.logging.logger import logger
 from app.platform.config.snapshot import get_config
+from app.dataplane.reverse.protocol.tool_parser import ParsedToolCall
 
 
 # ---------------------------------------------------------------------------
@@ -115,6 +116,8 @@ def build_console_payload(
     top_p: float = 0.95,
     reasoning_effort: str | None = None,
     stream: bool = True,
+    tools: list[dict[str, Any]] | None = None,
+    tool_choice: Any = None,
 ) -> dict[str, Any]:
     """Build the JSON payload for POST console.x.ai/v1/responses.
 
@@ -126,6 +129,14 @@ def build_console_payload(
         role = msg.get("role", "user")
         content = msg.get("content", "")
 
+        if role == "tool":
+            tool_output = _tool_message_to_console_output(msg)
+            if tool_output:
+                input_items.append(tool_output)
+            continue
+
+        tool_calls = msg.get("tool_calls")
+
         # 映射 role
         if role in ("system", "developer"):
             # system 消息作为 instructions 字段处理，这里先放入 input
@@ -135,30 +146,13 @@ def build_console_payload(
         else:
             api_role = "user"
 
-        # 处理 content
-        if isinstance(content, str):
-            content_blocks = [{"type": "input_text", "text": content}]
-        elif isinstance(content, list):
-            content_blocks = []
-            for block in content:
-                if not isinstance(block, dict):
-                    continue
-                btype = block.get("type", "")
-                if btype == "text":
-                    content_blocks.append({"type": "input_text", "text": block.get("text", "")})
-                elif btype == "image_url":
-                    url = (block.get("image_url") or {}).get("url", "")
-                    if url:
-                        content_blocks.append({"type": "input_image", "image_url": url})
-                else:
-                    # 其他类型降级为文本
-                    text = block.get("text") or str(block)
-                    content_blocks.append({"type": "input_text", "text": text})
-        else:
-            content_blocks = [{"type": "input_text", "text": str(content)}]
+        content_blocks = _message_content_blocks(content)
 
         if content_blocks:
             input_items.append({"role": api_role, "content": content_blocks})
+
+        if role == "assistant" and tool_calls:
+            input_items.extend(_assistant_tool_calls_to_console(tool_calls))
 
     # reasoning effort：模型名固定值优先，其次用户传入，最后默认 medium
     effort = _MODEL_FIXED_EFFORT.get(model) or _EFFORT_MAP.get(reasoning_effort or "medium", "medium")
@@ -181,19 +175,185 @@ def build_console_payload(
     if console_model in _MODELS_WITH_REASONING_FIELD:
         payload["reasoning"] = {"effort": effort}
 
-    # 为 multi-agent 和支持搜索的模型添加 tools
-    if console_model in _MODELS_WITH_SEARCH_TOOLS:
-        payload["tools"] = [
+    user_tools = _to_console_tools(tools or [])
+    payload_tools: list[dict[str, Any]] = []
+
+    # Preserve the historical default console search behaviour for normal chat,
+    # while keeping Agent-provided tool calls faithful to the client's tool set.
+    if console_model in _MODELS_WITH_SEARCH_TOOLS and not user_tools:
+        payload_tools.extend([
             {"type": "web_search", "enable_image_understanding": True},
             {"type": "x_search", "enable_video_understanding": True},
-        ]
-        payload["tool_choice"] = "auto"
+        ])
+    payload_tools.extend(user_tools)
+
+    if payload_tools:
+        payload["tools"] = payload_tools
+        payload["tool_choice"] = _to_console_tool_choice(tool_choice) or "auto"
 
     logger.debug(
-        "console payload built: model={} console_model={} input_items={} has_reasoning={}",
+        "console payload built: model={} console_model={} input_items={} has_reasoning={} tool_count={}",
         model, console_model, len(input_items), console_model in _MODELS_WITH_REASONING_FIELD,
+        len(payload_tools),
     )
     return payload
+
+
+def _to_console_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Convert OpenAI Chat/Responses function tools to console Responses shape."""
+    converted: list[dict[str, Any]] = []
+    for tool in tools:
+        if not isinstance(tool, dict):
+            continue
+
+        if tool.get("type") != "function":
+            converted.append(dict(tool))
+            continue
+
+        fn = tool.get("function")
+        src = fn if isinstance(fn, dict) else tool
+        name = str(src.get("name") or "").strip()
+        if not name:
+            continue
+
+        item: dict[str, Any] = {
+            "type": "function",
+            "name": name,
+        }
+        description = src.get("description")
+        if description is not None:
+            item["description"] = description
+        parameters = src.get("parameters")
+        if parameters is not None:
+            item["parameters"] = parameters
+
+        # Preserve common strict-schema flags if clients provide them.
+        for key in ("strict",):
+            if key in src:
+                item[key] = src[key]
+            elif key in tool:
+                item[key] = tool[key]
+
+        converted.append(item)
+    return converted
+
+
+def _to_console_tool_choice(tool_choice: Any) -> Any:
+    """Map OpenAI Chat tool_choice to console Responses tool_choice."""
+    if tool_choice is None:
+        return None
+    if isinstance(tool_choice, str):
+        return tool_choice
+    if not isinstance(tool_choice, dict):
+        return tool_choice
+
+    choice_type = tool_choice.get("type")
+    if choice_type != "function":
+        return dict(tool_choice)
+
+    fn = tool_choice.get("function")
+    if isinstance(fn, dict):
+        name = str(fn.get("name") or "").strip()
+    else:
+        name = str(tool_choice.get("name") or "").strip()
+    if not name:
+        return dict(tool_choice)
+    return {"type": "function", "name": name}
+
+
+def _message_content_blocks(content: Any) -> list[dict[str, Any]]:
+    if content is None:
+        return []
+    if isinstance(content, str):
+        return [{"type": "input_text", "text": content}] if content else []
+    if isinstance(content, list):
+        content_blocks: list[dict[str, Any]] = []
+        for block in content:
+            if not isinstance(block, dict):
+                content_blocks.append({"type": "input_text", "text": str(block)})
+                continue
+            btype = block.get("type", "")
+            if btype == "text":
+                content_blocks.append({"type": "input_text", "text": block.get("text", "")})
+            elif btype == "input_text":
+                content_blocks.append({"type": "input_text", "text": block.get("text", "")})
+            elif btype == "image_url":
+                url = (block.get("image_url") or {}).get("url", "")
+                if url:
+                    content_blocks.append({"type": "input_image", "image_url": url})
+            elif btype == "input_image":
+                url = block.get("image_url") or block.get("file_id") or ""
+                if url:
+                    content_blocks.append(dict(block))
+            else:
+                text = block.get("text") or str(block)
+                content_blocks.append({"type": "input_text", "text": text})
+        return content_blocks
+    return [{"type": "input_text", "text": str(content)}]
+
+
+def _content_to_text(content: Any) -> str:
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, dict):
+                text = block.get("text")
+                if text is None:
+                    text = block.get("content")
+                parts.append(str(text if text is not None else block))
+            else:
+                parts.append(str(block))
+        return "\n".join(part for part in parts if part)
+    return str(content)
+
+
+def _assistant_tool_calls_to_console(tool_calls: Any) -> list[dict[str, Any]]:
+    if not isinstance(tool_calls, list):
+        return []
+
+    items: list[dict[str, Any]] = []
+    for tool_call in tool_calls:
+        if not isinstance(tool_call, dict):
+            continue
+        if tool_call.get("type") not in (None, "function"):
+            continue
+        fn = tool_call.get("function")
+        if not isinstance(fn, dict):
+            continue
+        name = str(fn.get("name") or "").strip()
+        if not name:
+            continue
+        call_id = str(tool_call.get("id") or tool_call.get("call_id") or "").strip()
+        if not call_id:
+            continue
+        arguments = fn.get("arguments")
+        if arguments is None:
+            arguments = "{}"
+        elif not isinstance(arguments, str):
+            arguments = orjson.dumps(arguments).decode()
+        items.append({
+            "type": "function_call",
+            "call_id": call_id,
+            "name": name,
+            "arguments": arguments,
+            "status": "completed",
+        })
+    return items
+
+
+def _tool_message_to_console_output(msg: dict[str, Any]) -> dict[str, Any] | None:
+    call_id = str(msg.get("tool_call_id") or msg.get("call_id") or "").strip()
+    if not call_id:
+        return None
+    return {
+        "type": "function_call_output",
+        "call_id": call_id,
+        "output": _content_to_text(msg.get("content", "")),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -203,16 +363,24 @@ def build_console_payload(
 class ConsoleStreamAdapter:
     """Parse console.x.ai SSE events and yield text tokens.
 
-    只关心 response.output_text.delta 事件，其余忽略。
+    处理 response.output_text.delta 文本事件，并收集原生 function_call 事件。
     response.completed 事件用于提取 usage 统计。
     """
 
-    __slots__ = ("text_buf", "usage", "_done")
+    __slots__ = (
+        "text_buf",
+        "usage",
+        "_done",
+        "_function_calls",
+        "_function_order",
+    )
 
     def __init__(self) -> None:
         self.text_buf: list[str] = []
         self.usage: dict[str, Any] | None = None
         self._done = False
+        self._function_calls: dict[str, dict[str, Any]] = {}
+        self._function_order: list[str] = []
 
     def feed(self, event_type: str, data: str) -> list[str]:
         """解析一个 SSE 事件，返回文本 token 列表（通常 0 或 1 个）。"""
@@ -230,9 +398,38 @@ class ConsoleStreamAdapter:
                 self.text_buf.append(delta)
                 return [delta]
 
+        elif event_type == "response.output_item.added":
+            item = obj.get("item")
+            if isinstance(item, dict) and item.get("type") == "function_call":
+                self._upsert_function_call(item, obj)
+
+        elif event_type == "response.function_call_arguments.delta":
+            key = self._function_key(obj)
+            delta = obj.get("delta", "")
+            if key and isinstance(delta, str):
+                info = self._ensure_function_call(key, obj)
+                info["arguments"] = str(info.get("arguments") or "") + delta
+
+        elif event_type == "response.function_call_arguments.done":
+            key = self._function_key(obj)
+            args = obj.get("arguments")
+            if key and isinstance(args, str):
+                info = self._ensure_function_call(key, obj)
+                info["arguments"] = args
+
+        elif event_type == "response.output_item.done":
+            item = obj.get("item")
+            if isinstance(item, dict) and item.get("type") == "function_call":
+                self._upsert_function_call(item, obj, completed=True)
+
         elif event_type == "response.completed":
             resp = obj.get("response", {})
-            self.usage = resp.get("usage")
+            self.usage = resp.get("usage") if isinstance(resp, dict) else None
+            output = resp.get("output") if isinstance(resp, dict) else None
+            if isinstance(output, list):
+                for item in output:
+                    if isinstance(item, dict) and item.get("type") == "function_call":
+                        self._upsert_function_call(item, {}, completed=True)
             self._done = True
 
         elif event_type == "error":
@@ -241,9 +438,83 @@ class ConsoleStreamAdapter:
 
         return []
 
+    def _function_key(self, obj: dict[str, Any]) -> str:
+        raw = obj.get("item_id")
+        if raw:
+            return str(raw)
+        raw = obj.get("output_index")
+        return f"output:{raw}" if raw is not None else ""
+
+    def _ensure_function_call(self, key: str, obj: dict[str, Any]) -> dict[str, Any]:
+        info = self._function_calls.get(key)
+        if info is None:
+            info = {
+                "id": key,
+                "type": "function_call",
+                "call_id": "",
+                "name": "",
+                "arguments": "",
+                "status": "in_progress",
+            }
+            self._function_calls[key] = info
+            self._function_order.append(key)
+        output_index = obj.get("output_index")
+        if output_index is not None:
+            info["output_index"] = output_index
+        return info
+
+    def _upsert_function_call(
+        self,
+        item: dict[str, Any],
+        event_obj: dict[str, Any],
+        *,
+        completed: bool = False,
+    ) -> None:
+        key = str(item.get("id") or self._function_key(event_obj) or item.get("call_id") or "")
+        if not key:
+            return
+        info = self._ensure_function_call(key, event_obj)
+        for field in ("id", "call_id", "name"):
+            if item.get(field):
+                info[field] = item[field]
+        item_args = item.get("arguments")
+        if isinstance(item_args, str) and (item_args or not info.get("arguments")):
+            info["arguments"] = item_args
+        if completed or item.get("status") == "completed":
+            info["status"] = "completed"
+
     @property
     def full_text(self) -> str:
         return "".join(self.text_buf)
+
+    @property
+    def function_call_items(self) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+        for key in self._function_order:
+            info = self._function_calls.get(key) or {}
+            name = str(info.get("name") or "").strip()
+            if not name:
+                continue
+            items.append({
+                "id": str(info.get("id") or key),
+                "type": "function_call",
+                "call_id": str(info.get("call_id") or key),
+                "name": name,
+                "arguments": str(info.get("arguments") or "{}"),
+                "status": str(info.get("status") or "completed"),
+            })
+        return items
+
+    @property
+    def parsed_tool_calls(self) -> list[ParsedToolCall]:
+        return [
+            ParsedToolCall(
+                call_id=str(item.get("call_id") or item.get("id")),
+                name=str(item["name"]),
+                arguments=str(item.get("arguments") or "{}"),
+            )
+            for item in self.function_call_items
+        ]
 
 
 def classify_console_line(line: str) -> tuple[str, str]:

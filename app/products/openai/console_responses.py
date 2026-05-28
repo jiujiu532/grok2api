@@ -75,6 +75,69 @@ async def _fail_sync(token: str, mode_id: int, exc: BaseException | None = None)
         )
 
 
+def _message_added_event(message_id: str) -> str:
+    return format_sse("response.output_item.added", {
+        "type": "response.output_item.added",
+        "output_index": 0,
+        "item": {
+            "id": message_id,
+            "type": "message",
+            "role": "assistant",
+            "status": "in_progress",
+            "content": [],
+        },
+    })
+
+
+def _content_part_added_event(message_id: str) -> str:
+    return format_sse("response.content_part.added", {
+        "type": "response.content_part.added",
+        "item_id": message_id,
+        "output_index": 0,
+        "content_index": 0,
+        "part": {"type": "output_text", "text": "", "annotations": []},
+    })
+
+
+def _function_call_events(items: list[dict]) -> list[str]:
+    events: list[str] = []
+    for output_index, item in enumerate(items):
+        item_id = item["id"]
+        arguments = item.get("arguments") or "{}"
+        events.append(format_sse("response.output_item.added", {
+            "type": "response.output_item.added",
+            "output_index": output_index,
+            "item": {
+                "id": item_id,
+                "type": "function_call",
+                "call_id": item["call_id"],
+                "name": item["name"],
+                "arguments": "",
+                "status": "in_progress",
+            },
+        }))
+        events.append(format_sse("response.function_call_arguments.delta", {
+            "type": "response.function_call_arguments.delta",
+            "item_id": item_id,
+            "output_index": output_index,
+            "delta": arguments,
+        }))
+        events.append(format_sse("response.function_call_arguments.done", {
+            "type": "response.function_call_arguments.done",
+            "item_id": item_id,
+            "output_index": output_index,
+            "arguments": arguments,
+        }))
+        done_item = dict(item)
+        done_item["status"] = "completed"
+        events.append(format_sse("response.output_item.done", {
+            "type": "response.output_item.done",
+            "output_index": output_index,
+            "item": done_item,
+        }))
+    return events
+
+
 async def create(
     *,
     model: str,
@@ -86,6 +149,8 @@ async def create(
     response_id: str,
     reasoning_id: str,
     message_id: str,
+    tools: list[dict] | None = None,
+    tool_choice: Any = None,
 ) -> dict | AsyncGenerator[str, None]:
     """Console models /v1/responses handler."""
 
@@ -130,6 +195,8 @@ async def create(
                         top_p=top_p,
                         reasoning_effort=effort,
                         stream=True,
+                        tools=tools,
+                        tool_choice=tool_choice,
                     )
 
                     try:
@@ -145,27 +212,12 @@ async def create(
                             "response": make_resp_object(response_id, model, "in_progress", []),
                         })
 
-                        # output_item.added (message)
-                        yield format_sse("response.output_item.added", {
-                            "type": "response.output_item.added",
-                            "output_index": 0,
-                            "item": {
-                                "id": message_id,
-                                "type": "message",
-                                "role": "assistant",
-                                "status": "in_progress",
-                                "content": [],
-                            },
-                        })
-
-                        # content_part.added
-                        yield format_sse("response.content_part.added", {
-                            "type": "response.content_part.added",
-                            "item_id": message_id,
-                            "output_index": 0,
-                            "content_index": 0,
-                            "part": {"type": "output_text", "text": "", "annotations": []},
-                        })
+                        client_tools_active = bool(tools)
+                        message_started = False
+                        if not client_tools_active:
+                            yield _message_added_event(message_id)
+                            yield _content_part_added_event(message_id)
+                            message_started = True
 
                         event_count = 0
                         async for event_type, data in stream_console_chat(
@@ -174,6 +226,12 @@ async def create(
                             event_count += 1
                             tokens = adapter.feed(event_type, data)
                             for tok in tokens:
+                                if adapter.function_call_items:
+                                    continue
+                                if not message_started:
+                                    yield _message_added_event(message_id)
+                                    yield _content_part_added_event(message_id)
+                                    message_started = True
                                 text_buf.append(tok)
                                 yield format_sse("response.output_text.delta", {
                                     "type": "response.output_text.delta",
@@ -190,6 +248,40 @@ async def create(
 
                         # 流结束
                         full_text = "".join(text_buf)
+                        function_items = adapter.function_call_items if client_tools_active else []
+
+                        # 原生 function_call 路径：本地重排 output_index 后输出标准事件。
+                        if function_items:
+                            for event in _function_call_events(function_items):
+                                yield event
+                            usage_data = adapter.usage
+                            input_tokens = (
+                                usage_data.get("input_tokens", 0) if usage_data
+                                else estimate_prompt_tokens(messages)
+                            )
+                            output_tokens = (
+                                usage_data.get("output_tokens", 0) if usage_data
+                                else estimate_tokens(orjson.dumps(function_items).decode())
+                            )
+                            yield format_sse("response.completed", {
+                                "type": "response.completed",
+                                "response": make_resp_object(
+                                    response_id, model, "completed", function_items,
+                                    usage=build_resp_usage(input_tokens, output_tokens),
+                                ),
+                            })
+                            yield "data: [DONE]\n\n"
+                            success = True
+                            logger.info(
+                                "console responses stream function_call: model={} calls={} attempt={}/{}",
+                                model, len(function_items), attempt + 1, max_retries + 1,
+                            )
+                            return
+
+                        if not message_started:
+                            yield _message_added_event(message_id)
+                            yield _content_part_added_event(message_id)
+                            message_started = True
 
                         # output_text.done
                         yield format_sse("response.output_text.done", {
@@ -312,6 +404,8 @@ async def create(
                 top_p=top_p,
                 reasoning_effort=effort,
                 stream=True,
+                tools=tools,
+                tool_choice=tool_choice,
             )
 
             try:
@@ -321,6 +415,7 @@ async def create(
                     adapter.feed(event_type, data)
 
                 full_text = adapter.full_text
+                function_items = adapter.function_call_items if tools else []
                 usage_data = adapter.usage
                 input_tokens = (
                     usage_data.get("input_tokens", 0) if usage_data
@@ -328,10 +423,12 @@ async def create(
                 )
                 output_tokens = (
                     usage_data.get("output_tokens", 0) if usage_data
-                    else estimate_tokens(full_text)
+                    else estimate_tokens(
+                        full_text or orjson.dumps(function_items).decode()
+                    )
                 )
 
-                output_items = [{
+                output_items = function_items or [{
                     "id": message_id,
                     "type": "message",
                     "role": "assistant",
@@ -343,10 +440,16 @@ async def create(
                     usage=build_resp_usage(input_tokens, output_tokens),
                 )
                 success = True
-                logger.info(
-                    "console responses non-stream completed: model={} text_len={}",
-                    model, len(full_text),
-                )
+                if function_items:
+                    logger.info(
+                        "console responses non-stream function_call: model={} calls={}",
+                        model, len(function_items),
+                    )
+                else:
+                    logger.info(
+                        "console responses non-stream completed: model={} text_len={}",
+                        model, len(full_text),
+                    )
                 return result
 
             except UpstreamError as exc:
