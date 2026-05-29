@@ -24,6 +24,7 @@ from app.control.model.registry import resolve as resolve_model
 from app.dataplane.account.selector import current_strategy
 from app.dataplane.reverse.protocol.xai_console_chat import (
     build_console_payload,
+    client_function_tool_names,
     ConsoleStreamAdapter,
     stream_console_chat,
 )
@@ -162,6 +163,7 @@ async def create(
 
     # reasoning effort 映射
     effort = "low" if emit_think else "none"
+    function_tool_names = client_function_tool_names(tools)
 
     from app.dataplane.account import _directory as _acct_dir
     if _acct_dir is None:
@@ -184,7 +186,7 @@ async def create(
                 success = False
                 fail_exc: BaseException | None = None
                 _retry = False
-                adapter = ConsoleStreamAdapter()
+                adapter = ConsoleStreamAdapter(function_tool_names=function_tool_names)
                 text_buf: list[str] = []
 
                 try:
@@ -394,7 +396,7 @@ async def create(
         token = acct.token
         success = False
         fail_exc: BaseException | None = None
-        adapter = ConsoleStreamAdapter()
+        adapter = ConsoleStreamAdapter(function_tool_names=function_tool_names)
 
         try:
             payload = build_console_payload(

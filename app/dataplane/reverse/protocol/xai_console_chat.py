@@ -238,6 +238,27 @@ def _to_console_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return converted
 
 
+def client_function_tool_names(tools: list[dict[str, Any]] | None) -> set[str]:
+    """Return names of client-declared function tools.
+
+    Console models can emit internal tool events for built-in tools such as
+    web_search/x_search. Only client function tools should become OpenAI
+    tool_calls.
+    """
+    names: set[str] = set()
+    for tool in tools or []:
+        if not isinstance(tool, dict):
+            continue
+        if tool.get("type") != "function":
+            continue
+        fn = tool.get("function")
+        src = fn if isinstance(fn, dict) else tool
+        name = str(src.get("name") or "").strip()
+        if name:
+            names.add(name)
+    return names
+
+
 def _to_console_tool_choice(tool_choice: Any) -> Any:
     """Map OpenAI Chat tool_choice to console Responses tool_choice."""
     if tool_choice is None:
@@ -373,14 +394,24 @@ class ConsoleStreamAdapter:
         "_done",
         "_function_calls",
         "_function_order",
+        "_allowed_function_names",
+        "_ignored_function_keys",
     )
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        function_tool_names: set[str] | list[str] | tuple[str, ...] | None = None,
+    ) -> None:
         self.text_buf: list[str] = []
         self.usage: dict[str, Any] | None = None
         self._done = False
         self._function_calls: dict[str, dict[str, Any]] = {}
         self._function_order: list[str] = []
+        self._allowed_function_names = (
+            None if function_tool_names is None
+            else {str(name).strip() for name in function_tool_names if str(name).strip()}
+        )
+        self._ignored_function_keys: set[str] = set()
 
     def feed(self, event_type: str, data: str) -> list[str]:
         """解析一个 SSE 事件，返回文本 token 列表（通常 0 或 1 个）。"""
@@ -405,6 +436,8 @@ class ConsoleStreamAdapter:
 
         elif event_type == "response.function_call_arguments.delta":
             key = self._function_key(obj)
+            if self._should_ignore_function_event(key, obj):
+                return []
             delta = obj.get("delta", "")
             if key and isinstance(delta, str):
                 info = self._ensure_function_call(key, obj)
@@ -412,6 +445,8 @@ class ConsoleStreamAdapter:
 
         elif event_type == "response.function_call_arguments.done":
             key = self._function_key(obj)
+            if self._should_ignore_function_event(key, obj):
+                return []
             args = obj.get("arguments")
             if key and isinstance(args, str):
                 info = self._ensure_function_call(key, obj)
@@ -445,6 +480,28 @@ class ConsoleStreamAdapter:
         raw = obj.get("output_index")
         return f"output:{raw}" if raw is not None else ""
 
+    def _allows_function_name(self, name: str) -> bool:
+        if self._allowed_function_names is None:
+            return True
+        return name in self._allowed_function_names
+
+    def _ignore_function_key(self, key: str) -> None:
+        if not key:
+            return
+        self._ignored_function_keys.add(key)
+        self._function_calls.pop(key, None)
+        if key in self._function_order:
+            self._function_order = [item for item in self._function_order if item != key]
+
+    def _should_ignore_function_event(self, key: str, obj: dict[str, Any]) -> bool:
+        if key and key in self._ignored_function_keys:
+            return True
+        name = str(obj.get("name") or "").strip()
+        if key and name and not self._allows_function_name(name):
+            self._ignore_function_key(key)
+            return True
+        return False
+
     def _ensure_function_call(self, key: str, obj: dict[str, Any]) -> dict[str, Any]:
         info = self._function_calls.get(key)
         if info is None:
@@ -473,6 +530,12 @@ class ConsoleStreamAdapter:
         key = str(item.get("id") or self._function_key(event_obj) or item.get("call_id") or "")
         if not key:
             return
+        if key in self._ignored_function_keys:
+            return
+        name = str(item.get("name") or "").strip()
+        if name and not self._allows_function_name(name):
+            self._ignore_function_key(key)
+            return
         info = self._ensure_function_call(key, event_obj)
         for field in ("id", "call_id", "name"):
             if item.get(field):
@@ -494,6 +557,8 @@ class ConsoleStreamAdapter:
             info = self._function_calls.get(key) or {}
             name = str(info.get("name") or "").strip()
             if not name:
+                continue
+            if not self._allows_function_name(name):
                 continue
             items.append({
                 "id": str(info.get("id") or key),
@@ -631,6 +696,7 @@ def _status_feedback(status: int):
 __all__ = [
     "CONSOLE_MODELS",
     "build_console_payload",
+    "client_function_tool_names",
     "ConsoleStreamAdapter",
     "classify_console_line",
     "stream_console_chat",

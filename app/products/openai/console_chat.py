@@ -27,6 +27,7 @@ from app.control.model.registry import resolve as resolve_model
 from app.dataplane.account.selector import current_strategy
 from app.dataplane.reverse.protocol.xai_console_chat import (
     build_console_payload,
+    client_function_tool_names,
     ConsoleStreamAdapter,
     stream_console_chat,
 )
@@ -111,6 +112,7 @@ async def completions(
     max_retries = selection_max_retries()
     retry_codes = _configured_retry_codes(cfg)
     response_id = make_response_id()
+    function_tool_names = client_function_tool_names(tools)
 
     logger.info(
         "console chat request: model={} stream={} messages={}",
@@ -140,7 +142,7 @@ async def completions(
                 success = False
                 fail_exc: BaseException | None = None
                 _retry = False
-                adapter = ConsoleStreamAdapter()
+                adapter = ConsoleStreamAdapter(function_tool_names=function_tool_names)
 
                 try:
                     payload = build_console_payload(
@@ -269,7 +271,7 @@ async def completions(
         token = acct.token
         success = False
         fail_exc: BaseException | None = None
-        adapter = ConsoleStreamAdapter()
+        adapter = ConsoleStreamAdapter(function_tool_names=function_tool_names)
 
         try:
             payload = build_console_payload(
