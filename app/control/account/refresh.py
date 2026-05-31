@@ -55,6 +55,25 @@ _MODE_KEYS = {
 }
 
 
+def _infer_pool_from_live_windows(windows: dict[int, QuotaWindow]) -> str | None:
+    """Infer pool only from quota totals that identify an entitlement tier."""
+    auto_win = windows.get(0)
+    if auto_win is not None:
+        inferred = infer_pool(windows)  # type: ignore[arg-type]
+        if inferred != "basic" or auto_win.total == 20:
+            return inferred
+
+    for mode_id in (2, 4):
+        win = windows.get(mode_id)
+        if win is None:
+            continue
+        if win.total == 150:
+            return "heavy"
+        if win.total == 50:
+            return "super"
+    return None
+
+
 class AccountRefreshService:
     """Fetches real quota data from the upstream usage API and persists it.
 
@@ -279,13 +298,8 @@ class AccountRefreshService:
         now = now_ms()
         patches: dict[str, dict] = {}
         refreshed = False
-        inferred = infer_pool(windows)  # type: ignore[arg-type]
-        if inferred == "basic" and windows:
-            if 3 in windows:
-                inferred = "heavy"
-            elif 2 in windows or 4 in windows:
-                inferred = "super"
-        effective_pool = inferred if bootstrap else record.pool
+        inferred = _infer_pool_from_live_windows(windows)
+        effective_pool = inferred if (bootstrap and inferred) else record.pool
 
         for mode in ALL_MODES_FULL:
             mode_id = int(mode)
@@ -327,8 +341,7 @@ class AccountRefreshService:
             return RefreshResult(checked=1, failed=0 if refreshed else 1)
 
         # Infer pool type from live quota data and patch if it changed.
-        inferred = effective_pool if bootstrap else inferred
-        pool_patch = inferred if inferred != record.pool else None
+        pool_patch = inferred if inferred is not None and inferred != record.pool else None
         if pool_patch:
             logger.info(
                 "account pool updated from live quota: token={}... previous_pool={} current_pool={}",
