@@ -278,7 +278,13 @@ class AccountRefreshService:
         now = now_ms()
         patches: dict[str, dict] = {}
         refreshed = False
-        effective_pool = infer_pool(windows) if bootstrap else record.pool
+        inferred = infer_pool(windows)  # type: ignore[arg-type]
+        if inferred == "basic" and windows:
+            if 3 in windows:
+                inferred = "heavy"
+            elif 2 in windows or 4 in windows:
+                inferred = "super"
+        effective_pool = inferred if bootstrap else record.pool
 
         for mode in ALL_MODES_FULL:
             mode_id = int(mode)
@@ -320,7 +326,7 @@ class AccountRefreshService:
             return RefreshResult(checked=1, failed=0 if refreshed else 1)
 
         # Infer pool type from live quota data and patch if it changed.
-        inferred = effective_pool if bootstrap else infer_pool(windows)  # type: ignore[arg-type]
+        inferred = effective_pool if bootstrap else inferred
         pool_patch = inferred if inferred != record.pool else None
         if pool_patch:
             logger.info(
