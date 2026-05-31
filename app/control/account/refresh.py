@@ -89,10 +89,11 @@ class AccountRefreshService:
 
             mode_ids = supported_mode_ids(pool)
             if bootstrap:
-                # Bootstrap refreshes need to probe auto first even when the
-                # current local image is still basic, otherwise a super/heavy
-                # token can stay misclassified forever.
-                mode_ids = tuple(dict.fromkeys((0, *mode_ids)))
+                # Bootstrap refreshes need entitlement probes even when the
+                # current local image is basic. If auto is flaky, expert/heavy
+                # windows still provide enough signal to avoid a sticky
+                # misclassification.
+                mode_ids = tuple(dict.fromkeys((0, 2, 3, 4, *mode_ids)))
             return await fetch_all_quotas(token, mode_ids)
         except UpstreamError:
             raise
