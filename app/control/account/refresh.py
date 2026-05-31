@@ -75,7 +75,7 @@ class AccountRefreshService:
     # ------------------------------------------------------------------
 
     async def _fetch_all_quotas(
-        self, token: str, pool: str
+        self, token: str, pool: str, *, bootstrap: bool = False
     ) -> dict[int, QuotaWindow] | None:
         """Fetch quota windows for every mode supported by *pool*.
 
@@ -87,7 +87,13 @@ class AccountRefreshService:
         try:
             from app.dataplane.reverse.protocol.xai_usage import fetch_all_quotas
 
-            return await fetch_all_quotas(token, supported_mode_ids(pool))
+            mode_ids = supported_mode_ids(pool)
+            if bootstrap:
+                # Bootstrap refreshes need to probe auto first even when the
+                # current local image is still basic, otherwise a super/heavy
+                # token can stay misclassified forever.
+                mode_ids = tuple(dict.fromkeys((0, *mode_ids)))
+            return await fetch_all_quotas(token, mode_ids)
         except UpstreamError:
             raise
         except Exception as exc:
@@ -141,7 +147,7 @@ class AccountRefreshService:
         concurrency = get_config("account.refresh.usage_concurrency", 50)
         results = await run_batch(
             active,
-            lambda r: self._refresh_one(r, apply_fallback=True),
+            lambda r: self._refresh_one(r, apply_fallback=True, bootstrap=True),
             concurrency=concurrency,
         )
         agg = RefreshResult(checked=len(records))
@@ -220,7 +226,11 @@ class AccountRefreshService:
         """Explicit refresh for a list of tokens (admin / manual trigger)."""
         records = [r for r in await self._repo.get_accounts(tokens) if is_manageable(r)]
         concurrency = get_config("account.refresh.usage_concurrency", 50)
-        results = await run_batch(records, self._refresh_one, concurrency=concurrency)
+        results = await run_batch(
+            records,
+            lambda r: self._refresh_one(r, bootstrap=True),
+            concurrency=concurrency,
+        )
         agg = RefreshResult()
         for r in results:
             agg.merge(r)
@@ -235,6 +245,7 @@ class AccountRefreshService:
         record: AccountRecord,
         *,
         apply_fallback: bool = False,
+        bootstrap: bool = False,
     ) -> RefreshResult:
         """Fetch all pool-supported modes from the usage API and persist them.
 
@@ -247,7 +258,9 @@ class AccountRefreshService:
             return RefreshResult()
 
         try:
-            windows = await self._fetch_all_quotas(record.token, record.pool)
+            windows = await self._fetch_all_quotas(
+                record.token, record.pool, bootstrap=bootstrap
+            )
         except UpstreamError as exc:
             if await self._expire_invalid_credentials(record, exc):
                 return RefreshResult(checked=1, expired=1, failed=0)
@@ -265,11 +278,14 @@ class AccountRefreshService:
         now = now_ms()
         patches: dict[str, dict] = {}
         refreshed = False
+        effective_pool = infer_pool(windows) if bootstrap else record.pool
 
         for mode in ALL_MODES_FULL:
             mode_id = int(mode)
             if mode_id in windows:
-                window = normalize_quota_window(record.pool, mode_id, windows[mode_id])
+                window = normalize_quota_window(
+                    effective_pool, mode_id, windows[mode_id]
+                )
                 if window is None:
                     continue
                 patches[_MODE_KEYS[mode_id]] = window.to_dict()
@@ -288,7 +304,7 @@ class AccountRefreshService:
                         source=QuotaSource.ESTIMATED,
                     ).to_dict()
                 elif existing.is_window_expired(now):
-                    default = default_quota_window(record.pool, mode_id)
+                    default = default_quota_window(effective_pool, mode_id)
                     if default is None:
                         continue
                     patches[_MODE_KEYS[mode_id]] = QuotaWindow(
@@ -304,7 +320,7 @@ class AccountRefreshService:
             return RefreshResult(checked=1, failed=0 if refreshed else 1)
 
         # Infer pool type from live quota data and patch if it changed.
-        inferred = infer_pool(windows)  # type: ignore[arg-type]
+        inferred = effective_pool if bootstrap else infer_pool(windows)  # type: ignore[arg-type]
         pool_patch = inferred if inferred != record.pool else None
         if pool_patch:
             logger.info(
