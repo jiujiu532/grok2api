@@ -20,6 +20,7 @@ Grok2API 是一个基于 **FastAPI** 构建的 Grok 网关，将 Grok Web 能力
 - 支持文生图、图像编辑、文生视频、图生视频
 - 内置 Admin 后台管理、Web Chat、Masonry 生图、ChatKit 语音页面
 - 支持 `console.x.ai` 免费账号，新增 `*-console` 模型系列
+- 支持 `x-statsig-id` 动态签名（无头浏览器方案），解决 Grok 反爬校验 403 问题
 
 <br>
 
@@ -91,6 +92,7 @@ docker compose -f docker-compose.warp.yml up -d
 | `warp-proxy` | Cloudflare WARP 出口代理，提供干净的 Cloudflare IP |
 | `privoxy` | HTTP 代理，将流量转发到 WARP（已预配置，无需手动操作） |
 | `flaresolverr` | 自动解 Cloudflare 挑战，获取 cf_clearance |
+| `statsig-signer` | 无头浏览器签名服务，动态获取真实 `x-statsig-id`（首次启动约 60-90s） |
 | `grok2api` | 主服务，代理配置由 init 容器自动写入 |
 
 启动后代理配置已自动完成，进入 Admin 后台添加账号即可使用。
@@ -306,8 +308,24 @@ server {
 | `ACCOUNT_SQL_POOL_TIMEOUT` | 等待空闲连接超时（秒） | `30` |
 | `ACCOUNT_SQL_POOL_RECYCLE` | 连接最大复用时间（秒） | `1800` |
 | `CONFIG_LOCAL_PATH` | 运行时配置文件路径 | `${DATA_DIR}/config.toml` |
+| `GROK_STATSIG_SIGNER_URL` | Statsig 签名服务地址（防封版默认自动配置） | `http://statsig-signer:3000/sign` |
 
 运行时配置也支持 `GROK_` 前缀环境变量覆盖，例如 `GROK_APP_API_KEY` 覆盖 `app.api_key`，`GROK_FEATURES_STREAM` 覆盖 `features.stream`。
+
+### Statsig 签名配置
+
+Grok 近期加强了反爬机制，新增对 `x-statsig-id` 请求头的严格校验。本项目通过 `statsig-signer` 无头浏览器签名服务解决此问题。
+
+`config.toml` 中的 `[statsig]` 配置段：
+
+| 配置项 | 说明 | 默认值 |
+| :-- | :-- | :-- |
+| `statsig.signer_url` | 签名服务地址；留空则回退到内置假值 | `""` |
+| `statsig.timeout` | 调用签名服务超时（秒） | `5` |
+| `statsig.cache_ttl` | 客户端签名缓存 TTL（秒），按 path+method 缓存 | `20` |
+| `statsig.fail_cooldown` | 签名失败后冷却期（秒），期间直接走假值 | `5` |
+
+> 防封版部署时签名服务自动启动，`GROK_STATSIG_SIGNER_URL` 环境变量已默认指向 `http://statsig-signer:3000/sign`，无需手动配置。标准版部署如需启用，自行搭建 statsig-signer 容器并配置 `statsig.signer_url`。
 
 <br>
 
@@ -475,11 +493,15 @@ curl http://localhost:8000/v1/videos \
 **Q: 多 worker 部署？**
 `SERVER_WORKERS` 大于 1 时，账号刷新调度器会通过文件锁选举出唯一 leader，其他 worker 仅做轻量同步，安全可用。Windows 下建议保持单 worker。
 
+**Q: API 返回 403 且日志无 Cloudflare 拦截？**
+Grok 新增了 `x-statsig-id` 反爬校验。确保 `statsig-signer` 容器正常运行（`docker ps | grep statsig`），首次启动需 60-90s 加载页面和注入签名。可在签名机日志中确认 `signer ready` 字样（`docker logs statsig-signer`）。
+
 <br>
 
 ## 致谢
 
 - 上游：[chenyme/grok2api](https://github.com/chenyme/grok2api)
+- statsig-signer 签名方案：[duanzhenyu/grok2api](https://github.com/duanzhenyu/grok2api)
 - DeepWiki：[chenyme/grok2api](https://deepwiki.com/chenyme/grok2api)
 - 项目文档：[blog.cheny.me](https://blog.cheny.me/blog/posts/grok2api)
 - 社区：[Linux.do](https://linux.do)
