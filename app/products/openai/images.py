@@ -911,6 +911,8 @@ async def _stream_image_edit(
         lease=lease,
         origin="https://grok.com",
         referer=f"https://grok.com/imagine/post/{parent_post_id}",
+        url=CHAT,
+        method="POST",
     )
     kwargs = build_session_kwargs(lease=lease)
 
@@ -948,7 +950,7 @@ async def _stream_lite_generate(
         file_attachments  = [],
         request_overrides = {"imageGenerationCount": 2},
     )
-    headers = build_http_headers(token, lease=lease)
+    headers = build_http_headers(token, lease=lease, url=CHAT, method="POST")
     kwargs  = build_session_kwargs(lease=lease)
 
     async with ResettableSession(**kwargs) as session:

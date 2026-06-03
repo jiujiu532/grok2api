@@ -34,6 +34,8 @@ async def post_stream(
         origin=origin,
         referer=referer,
         lease=lease,
+        url=url,
+        method="POST",
     )
     kwargs = build_session_kwargs(lease=lease)
 
@@ -102,7 +104,8 @@ async def post_json(
     When *session* is ``None`` a fresh session is created and closed automatically.
     """
     headers = build_http_headers(
-        token, content_type=content_type, origin=origin, referer=referer, lease=lease
+        token, content_type=content_type, origin=origin, referer=referer, lease=lease,
+        url=url, method="POST",
     )
 
     import orjson
@@ -146,6 +149,8 @@ async def get_json(
         origin=origin,
         referer=referer,
         lease=lease,
+        url=url,
+        method="GET",
     )
     kwargs = build_session_kwargs(lease=lease)
 
@@ -193,6 +198,8 @@ async def delete_json(
         origin=origin,
         referer=referer,
         lease=lease,
+        url=url,
+        method="DELETE",
     )
     kwargs = build_session_kwargs(lease=lease)
 

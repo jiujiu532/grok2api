@@ -333,6 +333,8 @@ async def _stream_video_request(
         origin="https://grok.com",
         referer=referer,
         lease=lease,
+        url=CHAT,
+        method="POST",
     )
     kwargs = build_session_kwargs(lease=lease)
 

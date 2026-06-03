@@ -1,0 +1,15 @@
+{
+  "name": "statsig-signer",
+  "version": "1.0.0",
+  "description": "Headless-browser signer for grok x-statsig-id",
+  "private": true,
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "playwright": "1.49.1",
+    "sql.js": "1.12.0"
+  }
+}

@@ -125,7 +125,7 @@ async def _upload_file_inner(
         "fileMimeType": mime,
         "content":      b64,
     })
-    headers = build_http_headers(token, lease=lease)
+    headers = build_http_headers(token, lease=lease, url=_UPLOAD_URL, method="POST")
     kwargs  = build_session_kwargs(lease=lease)
 
     try:

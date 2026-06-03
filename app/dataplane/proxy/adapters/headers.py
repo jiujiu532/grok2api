@@ -4,9 +4,12 @@ All values are sanitized to ASCII-safe Latin-1 before use.
 """
 
 import base64
+import json
 import random
 import re
 import string
+import time
+import urllib.request
 import uuid
 from typing import Optional
 from urllib.parse import urlparse
@@ -64,8 +67,53 @@ def _sanitize(value: Optional[str], *, field: str, strip_spaces: bool = False) -
 # ---------------------------------------------------------------------------
 
 
-def _statsig_id() -> str:
-    cfg = get_config()
+# Client-side signature cache: {"METHOD|path": (signature, expiry_ts)}.
+# Safe without locking — _statsig_id is synchronous and the asyncio event loop
+# is single-threaded, so concurrent coroutines never interleave inside it.
+_SIG_CACHE: dict[str, tuple[str, float]] = {}
+_SIG_CACHE_MAX = 512
+# Negative cache: after a signer failure, skip remote calls until this monotonic
+# deadline so a dead/slow signer can't block the event loop on every request.
+_SIGNER_FAIL_UNTIL: float = 0.0
+
+
+def _cache_put(key: str, sig: str, exp: float) -> None:
+    if len(_SIG_CACHE) >= _SIG_CACHE_MAX:
+        now = time.monotonic()
+        for k in [k for k, (_, e) in _SIG_CACHE.items() if e <= now]:
+            _SIG_CACHE.pop(k, None)
+        if len(_SIG_CACHE) >= _SIG_CACHE_MAX:
+            _SIG_CACHE.clear()
+    _SIG_CACHE[key] = (sig, exp)
+
+
+def _fetch_remote_statsig(
+    signer_url: str, path: str, method: str, timeout: float
+) -> Optional[str]:
+    """Request a real x-statsig-id from the signer service.
+
+    Synchronous (briefly blocks the event loop). Returns the signature on
+    success, ``None`` on any failure so the caller can fall back to the fake
+    value without aborting the request.
+    """
+    body = json.dumps({"path": path, "method": method}).encode()
+    req = urllib.request.Request(
+        signer_url,
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        sig = data.get("statsig")
+        return sig if isinstance(sig, str) and sig else None
+    except Exception as exc:
+        logger.warning("statsig signer request failed: url={} err={}", signer_url, exc)
+        return None
+
+
+def _fake_statsig_id(cfg) -> str:
     if cfg.get_bool("features.dynamic_statsig", False):
         if random.choice((True, False)):
             rand = "".join(random.choices(string.ascii_lowercase + string.digits, k=5))
@@ -78,6 +126,38 @@ def _statsig_id() -> str:
         "ZTpUeXBlRXJyb3I6IENhbm5vdCByZWFkIHByb3BlcnRpZXMgb2YgdW5kZWZpbmVkIChyZWFkaW5nICdjaGls"
         "ZE5vZGVzJyk="
     )
+
+
+def _statsig_id(path: str = "", method: str = "POST") -> str:
+    """Resolve x-statsig-id.
+
+    With ``statsig.signer_url`` configured and a non-empty *path*, fetch a real
+    signature from the signer service (with a short client-side cache); on any
+    failure fall back to the built-in fake value (legacy behaviour).
+    """
+    global _SIGNER_FAIL_UNTIL
+    cfg = get_config()
+    signer_url = cfg.get_str("statsig.signer_url", "").strip()
+    if signer_url and path:
+        ttl = cfg.get_float("statsig.cache_ttl", 20.0)
+        key = f"{method}|{path}"
+        now = time.monotonic()
+        if ttl > 0:
+            cached = _SIG_CACHE.get(key)
+            if cached and cached[1] > now:
+                return cached[0]
+        # Skip the remote call while in the post-failure cooldown window.
+        if now >= _SIGNER_FAIL_UNTIL:
+            timeout = cfg.get_float("statsig.timeout", 5.0)
+            sig = _fetch_remote_statsig(signer_url, path, method, timeout)
+            if sig:
+                _SIGNER_FAIL_UNTIL = 0.0
+                if ttl > 0:
+                    _cache_put(key, sig, now + ttl)
+                return sig
+            _SIGNER_FAIL_UNTIL = now + cfg.get_float("statsig.fail_cooldown", 5.0)
+        # Signer unconfigured / failing → degrade to the fake value, don't abort.
+    return _fake_statsig_id(cfg)
 
 
 # ---------------------------------------------------------------------------
@@ -224,8 +304,15 @@ def build_http_headers(
     origin: Optional[str] = None,
     referer: Optional[str] = None,
     lease: ProxyLease | None = None,
+    url: Optional[str] = None,
+    method: str = "POST",
 ) -> dict[str, str]:
-    """Build headers for a standard HTTP reverse-proxy request."""
+    """Build headers for a standard HTTP reverse-proxy request.
+
+    Pass *url* (and *method*) for grok.com API endpoints so a real
+    ``x-statsig-id`` can be signed for that request path; omit them for
+    non-grok requests (the fake fallback value is used instead).
+    """
     profile = _resolve_profile(lease)
     raw_ua = profile.user_agent
     ua = _sanitize(raw_ua, field="user_agent")
@@ -268,7 +355,7 @@ def build_http_headers(
         "Sec-Fetch-Mode": "cors",
         "Sec-Fetch-Site": site,
         "User-Agent": ua,
-        "x-statsig-id": _statsig_id(),
+        "x-statsig-id": _statsig_id(urlparse(url).path if url else "", method),
         "x-xai-request-id": str(uuid.uuid4()),
     }
     headers.update(_client_hints(browser, raw_ua))

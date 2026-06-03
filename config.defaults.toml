@@ -102,6 +102,18 @@ timeout_sec = 60
 refresh_interval = 3600
 
 
+# ==================== Statsig 签名 ====================
+[statsig]
+# 签名服务地址；留空 = 回退到内置假值（旧行为）
+signer_url = ""
+# 调用签名服务的超时（秒）
+timeout = 5
+# 客户端签名缓存 TTL（秒），0 = 不缓存；按 path|method 缓存真签名以减少阻塞
+cache_ttl = 20
+# 签名服务失败后的冷却（秒）：此窗口内直接走假值，避免每请求阻塞 event loop
+fail_cooldown = 5
+
+
 # ==================== 重试策略 ====================
 [retry]
 # [Transport 层] 触发重建代理 Session 的 HTTP 状态码

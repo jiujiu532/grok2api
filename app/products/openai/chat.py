@@ -409,6 +409,8 @@ async def _stream_chat(
         origin="https://grok.com",
         referer="https://grok.com/",
         lease=lease,
+        url=CHAT,
+        method="POST",
     )
     session_kwargs = build_session_kwargs(lease=lease)
 

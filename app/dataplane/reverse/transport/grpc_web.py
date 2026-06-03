@@ -55,6 +55,8 @@ async def post_grpc_web(
         origin       = origin,
         referer      = referer,
         lease        = lease,
+        url          = url,
+        method       = "POST",
     )
     headers.update(_GRPC_WEB_HEADERS)
 
