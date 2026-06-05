@@ -238,6 +238,7 @@ async def batch_nsfw(
     else:
         if not tokens:
             raise ValidationError("No tokens provided", param="tokens")
+        # Explicit refresh follows NSFW maintenance: only manageable accounts are operator-maintainable.
         requested_count = len(tokens)
         tokens = await _filter_manageable_tokens(repo, tokens)
         skipped_count = requested_count - len(tokens)
@@ -269,8 +270,16 @@ async def batch_refresh(
         raise ValidationError("tokens must be empty when all_manageable=true", param="tokens")
     if all_manageable:
         tokens = await _list_all_tokens(repo)
+    else:
+        if not tokens:
+            raise ValidationError("No tokens provided", param="tokens")
+        requested_count = len(tokens)
+        tokens = await _filter_manageable_tokens(repo, tokens)
+        skipped_count = requested_count - len(tokens)
+        if skipped_count:
+            logger.info("admin batch refresh skipped non-manageable tokens: skipped_count={}", skipped_count)
     if not tokens:
-        raise ValidationError("No tokens provided", param="tokens")
+        raise ValidationError("No manageable tokens available", param="tokens")
 
     async def _refresh_one(token: str) -> dict:
         result = await refresh_svc.refresh_tokens([token])
