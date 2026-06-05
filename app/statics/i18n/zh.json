@@ -433,6 +433,10 @@
           "label": "允许 NSFW 生成",
           "desc": "允许图像生成接口绕过 NSFW 内容过滤。"
         },
+        "autoNsfwOnImport": {
+          "label": "导入账户自动开启 NSFW",
+          "desc": "开启后，导入、新增或替换账户池时会先刷新检测，再仅为正常/限流账户开启 NSFW。"
+        },
         "showSearchSources": {
           "label": "正文追加信源",
           "desc": "搜索信源始终以 search_sources 字段输出。此选项控制是否同时在正文末尾追加 ## Sources 段落（兼容文本解析客户端）。"

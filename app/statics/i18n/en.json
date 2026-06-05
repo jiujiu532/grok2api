@@ -433,6 +433,10 @@
           "label": "Allow NSFW Generation",
           "desc": "Permits the image generation endpoint to bypass NSFW content filtering."
         },
+        "autoNsfwOnImport": {
+          "label": "Auto-enable NSFW for Imported Accounts",
+          "desc": "When enabled, imported, newly added, or pool-replaced accounts are refreshed first, then NSFW is enabled only for active or cooling accounts."
+        },
         "showSearchSources": {
           "label": "Append Sources to Content",
           "desc": "Search sources are always output in the search_sources field. This option controls whether to also append a ## Sources section to the response content (for backward compatibility with text-parsing clients)."
