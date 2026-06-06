@@ -447,6 +447,7 @@ const SCHEMA_DEF = [
           { key: 'thinking_summary', label: '思考精简输出', labelKey: 'config.schema.fields.thinkingSummary.label', type: 'bool', desc: '启用后将思考过程提炼为结构化摘要。关闭时输出完整的原始推理过程，支持多 Agent 模型的协作详情与工具调用展示。', descKey: 'config.schema.fields.thinkingSummary.desc' },
           { key: 'dynamic_statsig', label: '动态 Statsig', labelKey: 'config.schema.fields.dynamicStatsig.label', type: 'bool', desc: '为每次请求动态生成 Statsig 设备指纹，以降低风控拦截概率。', descKey: 'config.schema.fields.dynamicStatsig.desc' },
           { key: 'enable_nsfw', label: '允许 NSFW 生成', labelKey: 'config.schema.fields.enableNsfw.label', type: 'bool', desc: '允许图像生成接口绕过 NSFW 内容过滤。', descKey: 'config.schema.fields.enableNsfw.desc' },
+          { key: 'auto_nsfw_on_import', section: 'account', label: '导入账户自动开启 NSFW', labelKey: 'config.schema.fields.autoNsfwOnImport.label', type: 'bool', default: false, desc: '开启后，导入、新增或替换账户池时会先刷新检测，再仅为正常/限流账户开启 NSFW。', descKey: 'config.schema.fields.autoNsfwOnImport.desc' },
           { key: 'show_search_sources', label: '正文追加信源', labelKey: 'config.schema.fields.showSearchSources.label', type: 'bool', desc: '搜索信源始终以 search_sources 字段输出。此选项控制是否同时在正文末尾追加 ## Sources 段落（兼容文本解析客户端）。', descKey: 'config.schema.fields.showSearchSources.desc' },
           { key: 'custom_instruction', label: '全局附加指令', labelKey: 'config.schema.fields.customInstruction.label', type: 'textarea', desc: '为每次请求注入统一的 system 消息，用于约束模型行为或固定角色设定。', descKey: 'config.schema.fields.customInstruction.desc' },
         ]
@@ -907,11 +908,16 @@ function _evalShowIf(showIf) {
 function _fullPath(section, key) { return `${section}.${key}`; }
 
 // Get the current value of a field from loaded config.
-function _getValue(section, key) { return _getByPath(_cfg, _fullPath(section, key)); }
+function _getValue(section, key, field) {
+  const value = _getByPath(_cfg, _fullPath(section, key));
+  return value === undefined && field && Object.prototype.hasOwnProperty.call(field, 'default')
+    ? field.default
+    : value;
+}
 
-function _getCurrentValue(section, key) {
+function _getCurrentValue(section, key, field) {
   const fp = _fullPath(section, key);
-  return fp in _dirty ? _dirty[fp] : _getValue(section, key);
+  return fp in _dirty ? _dirty[fp] : _getValue(section, key, field);
 }
 
 // ── Render ──────────────────────────────────────────────────────────────────
@@ -1004,7 +1010,7 @@ function renderInput(field, section, value) {
 
   const onChange = (v) => {
     const wasDirty = fp in _dirty;
-    const orig = _getValue(section, field.key);
+    const orig = _getValue(section, field.key, field);
     const same = String(orig) === String(v) || orig === v;
     if (same) delete _dirty[fp]; else _dirty[fp] = v;
     const isDirty = fp in _dirty;
@@ -1095,7 +1101,7 @@ function renderInput(field, section, value) {
 
 function renderRow(field, section, tabId) {
   const fp      = _fullPath(section, field.key);
-  const value   = _getValue(section, field.key);
+  const value   = _getValue(section, field.key, field);
   const isDirty = fp in _dirty;
 
   const dot   = _el('span', { class: 'cfg-modified-dot' });
@@ -1111,8 +1117,9 @@ function renderRow(field, section, tabId) {
       'data-webui-link': 'true',
       onclick: () => window.open('/webui/login', '_blank', 'noopener,noreferrer'),
     });
+    btn._configField = field;
     btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 5h5v5"/><path d="M10 14 19 5"/><path d="M19 14v5h-14v-14h5"/></svg>';
-    btn.disabled = !Boolean(_getCurrentValue(section, field.key));
+    btn.disabled = !Boolean(_getCurrentValue(section, field.key, field));
     labelChildren.push(btn);
   }
 
@@ -1257,7 +1264,7 @@ function _refreshDirtyState({ autoNormalizeSelects = true, changedPaths = null }
 
   const webuiLinkBtn = document.querySelector('[data-webui-link="true"]');
   if (webuiLinkBtn) {
-    const enabled = Boolean(_getCurrentValue('app', 'webui_enabled'));
+    const enabled = Boolean(_getCurrentValue('app', 'webui_enabled', webuiLinkBtn._configField));
     webuiLinkBtn.disabled = !enabled;
     webuiLinkBtn.title = enabled ? '打开 WebUI' : '启用 WebUI 后可打开';
     webuiLinkBtn.setAttribute('aria-label', webuiLinkBtn.title);

@@ -184,6 +184,7 @@
     "export": "Export Data",
     "batchNsfw": "Enable NSFW",
     "batchNsfwDisable": "Disable NSFW",
+    "rowActionNotSupported": "Current status does not support this action",
     "batchRefresh": "Refresh Selected",
     "batchDisable": "Disable Selected",
     "batchRestore": "Restore Selected",
@@ -432,6 +433,10 @@
         "enableNsfw": {
           "label": "Allow NSFW Generation",
           "desc": "Permits the image generation endpoint to bypass NSFW content filtering."
+        },
+        "autoNsfwOnImport": {
+          "label": "Auto-enable NSFW for Imported Accounts",
+          "desc": "When enabled, imported, newly added, or pool-replaced accounts are refreshed first, then NSFW is enabled only for active or cooling accounts."
         },
         "showSearchSources": {
           "label": "Append Sources to Content",

@@ -184,6 +184,7 @@
     "export": "导出数据",
     "batchNsfw": "开启 NSFW",
     "batchNsfwDisable": "关闭 NSFW",
+    "rowActionNotSupported": "当前状态不支持此操作",
     "batchRefresh": "刷新选中",
     "batchDisable": "禁用选中",
     "batchRestore": "恢复选中",
@@ -432,6 +433,10 @@
         "enableNsfw": {
           "label": "允许 NSFW 生成",
           "desc": "允许图像生成接口绕过 NSFW 内容过滤。"
+        },
+        "autoNsfwOnImport": {
+          "label": "导入账户自动开启 NSFW",
+          "desc": "开启后，导入、新增或替换账户池时会先刷新检测，再仅为正常/限流账户开启 NSFW。"
         },
         "showSearchSources": {
           "label": "正文追加信源",

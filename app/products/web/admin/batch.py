@@ -17,6 +17,7 @@ from pydantic import BaseModel
 
 from app.platform.config.snapshot import get_config
 from app.platform.errors import AppError, ErrorKind, UpstreamError, ValidationError
+from app.platform.logging.logger import logger
 from app.platform.runtime.batch import run_batch
 from app.platform.runtime.task import create_task, expire_task, get_task
 from app.control.account.commands import AccountPatch, ListAccountsQuery
@@ -29,6 +30,7 @@ if TYPE_CHECKING:
 from . import get_refresh_svc, get_repo
 
 router = APIRouter(prefix="/batch", tags=["Admin - Batch"])
+_MAX_BATCH_CONCURRENCY = 50
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -37,9 +39,13 @@ router = APIRouter(prefix="/batch", tags=["Admin - Batch"])
 def _concurrency(override: int | None, config_key: str, fallback: int = 50) -> int:
     """Resolve effective concurrency: query-param → config → fallback."""
     if override is not None:
-        return max(1, override)
+        return min(max(1, override), _MAX_BATCH_CONCURRENCY)
     v = get_config(config_key, fallback)
-    return max(1, int(v))
+    try:
+        resolved = int(v)
+    except (TypeError, ValueError):
+        resolved = fallback
+    return min(max(1, resolved), _MAX_BATCH_CONCURRENCY)
 
 
 def _mask(token: str) -> str:
@@ -51,10 +57,17 @@ async def _list_all_tokens(repo: "AccountRepository") -> list[str]:
     while True:
         page = await repo.list_accounts(ListAccountsQuery(page=page_num, page_size=2000))
         tokens.extend(r.token for r in page.items if is_manageable(r))
-        if page_num * 2000 >= page.total:
+        if page_num >= page.total_pages or not page.items:
             break
         page_num += 1
     return tokens
+
+
+async def _filter_manageable_tokens(repo: "AccountRepository", tokens: list[str]) -> list[str]:
+    unique_tokens = list(dict.fromkeys(tokens))
+    records = await repo.get_accounts(unique_tokens)
+    by_token = {r.token: r for r in records}
+    return [token for token in unique_tokens if (record := by_token.get(token)) and is_manageable(record)]
 
 
 def _json(data: Any, status_code: int = 200) -> Response:
@@ -124,7 +137,6 @@ async def _dispatch_async(
 
     async def _run() -> None:
         try:
-            sem = asyncio.Semaphore(concurrency)
             results: dict[str, Any] = {}
             ok_c = fail_c = 0
 
@@ -132,23 +144,20 @@ async def _dispatch_async(
                 nonlocal ok_c, fail_c
                 if task.cancelled:
                     return
-                async with sem:
-                    # Re-check after acquiring slot: cancel may have been set
-                    # while this coroutine was waiting for a semaphore slot.
+                masked = _mask(token)
+                try:
                     if task.cancelled:
                         return
-                    masked = _mask(token)
-                    try:
-                        data = await handler(token)
-                        ok_c += 1
-                        results[masked] = data
-                        task.record(True, item=masked, detail=data)
-                    except Exception as exc:
-                        fail_c += 1
-                        results[masked] = {"error": str(exc)}
-                        task.record(False, item=masked, error=str(exc))
+                    data = await handler(token)
+                    ok_c += 1
+                    results[masked] = data
+                    task.record(True, item=masked, detail=data)
+                except Exception as exc:
+                    fail_c += 1
+                    results[masked] = {"error": str(exc)}
+                    task.record(False, item=masked, error=str(exc))
 
-            await asyncio.gather(*[_one(t) for t in tokens])
+            await run_batch(tokens, _one, concurrency=concurrency)
 
             if task.cancelled:
                 task.finish_cancelled()
@@ -216,20 +225,34 @@ async def _cache_clear_one(repo: "AccountRepository", token: str) -> dict:
 async def batch_nsfw(
     req: BatchRequest,
     async_mode: bool = Query(False, alias="async"),
+    all_manageable: bool = Query(False),
     concurrency: int | None = Query(None, ge=1),
     enabled: bool = Query(True),
     repo: "AccountRepository" = Depends(get_repo),
 ):
     tokens = [t.strip() for t in req.tokens if t.strip()]
-    if not tokens:
+    if all_manageable and tokens:
+        raise ValidationError("tokens must be empty when all_manageable=true", param="tokens")
+    if all_manageable:
         tokens = await _list_all_tokens(repo)
+    else:
+        if not tokens:
+            raise ValidationError("No tokens provided", param="tokens")
+        # Explicit refresh follows NSFW maintenance: only manageable accounts are operator-maintainable.
+        requested_count = len(tokens)
+        tokens = await _filter_manageable_tokens(repo, tokens)
+        skipped_count = requested_count - len(tokens)
+        if skipped_count:
+            logger.info("admin batch nsfw skipped non-manageable tokens: skipped_count={}", skipped_count)
     if not tokens:
-        raise ValidationError("No tokens available", param="tokens")
+        raise ValidationError("No manageable tokens available", param="tokens")
 
     async def _nsfw_and_tag(token: str) -> dict:
         return await _nsfw_one(repo, token, enabled)
 
     c = _concurrency(concurrency, "batch.nsfw_concurrency")
+    if all_manageable:
+        logger.info("admin batch nsfw all manageable: token_count={} concurrency={}", len(tokens), c)
     return await _dispatch(tokens, _nsfw_and_tag, use_async=async_mode, concurrency=c)
 
 
@@ -237,12 +260,26 @@ async def batch_nsfw(
 async def batch_refresh(
     req: BatchRequest,
     async_mode: bool = Query(False, alias="async"),
+    all_manageable: bool = Query(False),
     concurrency: int | None = Query(None, ge=1),
+    repo: "AccountRepository" = Depends(get_repo),
     refresh_svc: "AccountRefreshService" = Depends(get_refresh_svc),
 ):
     tokens = [t.strip() for t in req.tokens if t.strip()]
+    if all_manageable and tokens:
+        raise ValidationError("tokens must be empty when all_manageable=true", param="tokens")
+    if all_manageable:
+        tokens = await _list_all_tokens(repo)
+    else:
+        if not tokens:
+            raise ValidationError("No tokens provided", param="tokens")
+        requested_count = len(tokens)
+        tokens = await _filter_manageable_tokens(repo, tokens)
+        skipped_count = requested_count - len(tokens)
+        if skipped_count:
+            logger.info("admin batch refresh skipped non-manageable tokens: skipped_count={}", skipped_count)
     if not tokens:
-        raise ValidationError("No tokens provided", param="tokens")
+        raise ValidationError("No manageable tokens available", param="tokens")
 
     async def _refresh_one(token: str) -> dict:
         result = await refresh_svc.refresh_tokens([token])
@@ -251,6 +288,8 @@ async def batch_refresh(
         return {"refreshed": result.refreshed}
 
     c = _concurrency(concurrency, "batch.refresh_concurrency")
+    if all_manageable:
+        logger.info("admin batch refresh all manageable: token_count={} concurrency={}", len(tokens), c)
     return await _dispatch(tokens, _refresh_one, use_async=async_mode, concurrency=c)
 
 
