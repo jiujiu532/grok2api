@@ -143,6 +143,7 @@ class AccountHtmlReviewFixTests(unittest.TestCase):
         for path in Path("app/statics/i18n").glob("*.json"):
             data = orjson.loads(path.read_bytes())
             with self.subTest(locale=path.name):
+                self.assertIn("account", data, f"Locale {path.name} missing account section")
                 self.assertIn("rowActionNotSupported", data["account"])
 
 
