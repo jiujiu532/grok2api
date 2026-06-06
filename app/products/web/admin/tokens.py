@@ -36,6 +36,7 @@ if TYPE_CHECKING:
 from . import get_refresh_svc, get_repo
 
 router = APIRouter(tags=["Admin - Tokens"])
+_background_tasks: set[asyncio.Task] = set()
 
 # ---------------------------------------------------------------------------
 # Token sanitisation
@@ -141,6 +142,22 @@ def _auto_nsfw_on_import_enabled() -> bool:
     return get_config().get_bool("account.auto_nsfw_on_import", False)
 
 
+def _fire_and_forget(coro) -> asyncio.Task:
+    # Keep a strong reference so import maintenance tasks cannot disappear before completion.
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+
+    def _cleanup(done: asyncio.Task) -> None:
+        _background_tasks.discard(done)
+        if done.cancelled():
+            return
+        if exc := done.exception():
+            logger.warning("admin background task failed: error_type={}", type(exc).__name__)
+
+    task.add_done_callback(_cleanup)
+    return task
+
+
 def _schedule_auto_nsfw(
     repo: "AccountRepository",
     tokens: list[str],
@@ -152,7 +169,7 @@ def _schedule_auto_nsfw(
     if not tokens or not enabled:
         return
     unique_tokens = list(dict.fromkeys(tokens))
-    asyncio.create_task(_enable_nsfw_imported(repo, unique_tokens))
+    _fire_and_forget(_enable_nsfw_imported(repo, unique_tokens))
 
 
 # ---------------------------------------------------------------------------
@@ -199,7 +216,7 @@ async def save_tokens(
 
     logger.info("admin tokens saved across pools: saved_count={}", total_upserted)
     if all_tokens:
-        asyncio.create_task(_refresh_then_auto_nsfw(
+        _fire_and_forget(_refresh_then_auto_nsfw(
             refresh_svc,
             repo,
             all_tokens,
@@ -260,7 +277,7 @@ async def add_tokens(
         if auto_nsfw_ready:
             _schedule_auto_nsfw(repo, new_tokens, enabled=auto_nsfw_enabled)
     else:
-        asyncio.create_task(_refresh_then_auto_nsfw(
+        _fire_and_forget(_refresh_then_auto_nsfw(
             refresh_svc,
             repo,
             new_tokens,
@@ -499,7 +516,7 @@ async def replace_pool(
     await repo.replace_pool(BulkReplacePoolCommand(pool=req.pool, upserts=upserts))
     logger.info("admin pool replaced: pool={} token_count={}", req.pool, len(cleaned))
     if cleaned:
-        asyncio.create_task(_refresh_then_auto_nsfw(
+        _fire_and_forget(_refresh_then_auto_nsfw(
             refresh_svc,
             repo,
             cleaned,

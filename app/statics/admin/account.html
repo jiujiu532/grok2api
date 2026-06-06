@@ -1496,13 +1496,13 @@ function rowHtml(t) {
   const success = t.use_count || 0;
   const fail = t.fail_count || 0;
   const nsfwBtn = isNsfw
-    ? `<button type="button" class="row-nsfw-btn is-on" ${canManageNsfw ? `data-nsfw-token="${xe(t.token)}" data-nsfw-enabled="false"` : 'disabled'} data-tip="${xe(canManageNsfw ? tr('account.batchNsfwDisable', null, '关闭 NSFW') : tr('account.noManageableAccounts', null, '没有可操作的可用账户'))}" aria-label="${xe(canManageNsfw ? tr('account.batchNsfwDisable', null, '关闭 NSFW') : tr('account.noManageableAccounts', null, '没有可操作的可用账户'))}">
+    ? `<button type="button" class="row-nsfw-btn is-on" ${canManageNsfw ? `data-nsfw-token="${xe(t.token)}" data-nsfw-enabled="false"` : 'disabled'} data-tip="${xe(canManageNsfw ? tr('account.batchNsfwDisable', null, '关闭 NSFW') : tr('account.rowActionNotSupported', null, '当前状态不支持此操作'))}" aria-label="${xe(canManageNsfw ? tr('account.batchNsfwDisable', null, '关闭 NSFW') : tr('account.rowActionNotSupported', null, '当前状态不支持此操作'))}">
         <svg viewBox="0 0 20 20" aria-hidden="true">
           <circle cx="10" cy="10" r="7.25"/>
           <text x="10" y="10.4">18</text>
         </svg>
       </button>`
-    : `<button type="button" class="row-nsfw-btn" ${canManageNsfw ? `data-nsfw-token="${xe(t.token)}" data-nsfw-enabled="true"` : 'disabled'} data-tip="${xe(canManageNsfw ? tr('account.batchNsfw', null, '开启 NSFW') : tr('account.noManageableAccounts', null, '没有可操作的可用账户'))}" aria-label="${xe(canManageNsfw ? tr('account.batchNsfw', null, '开启 NSFW') : tr('account.noManageableAccounts', null, '没有可操作的可用账户'))}">
+    : `<button type="button" class="row-nsfw-btn" ${canManageNsfw ? `data-nsfw-token="${xe(t.token)}" data-nsfw-enabled="true"` : 'disabled'} data-tip="${xe(canManageNsfw ? tr('account.batchNsfw', null, '开启 NSFW') : tr('account.rowActionNotSupported', null, '当前状态不支持此操作'))}" aria-label="${xe(canManageNsfw ? tr('account.batchNsfw', null, '开启 NSFW') : tr('account.rowActionNotSupported', null, '当前状态不支持此操作'))}">
         <svg viewBox="0 0 20 20" aria-hidden="true">
           <circle cx="10" cy="10" r="7.25"/>
           <text x="10" y="10.4">18</text>

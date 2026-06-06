@@ -183,6 +183,7 @@
     "export": "データをエクスポート",
     "batchNsfw": "NSFW を有効化",
     "batchNsfwDisable": "NSFW を無効化",
+    "rowActionNotSupported": "現在の状態ではこの操作はサポートされていません",
     "batchRefresh": "選択項目を更新",
     "batchDisable": "選択項目を無効化",
     "batchRestore": "選択項目を復元",

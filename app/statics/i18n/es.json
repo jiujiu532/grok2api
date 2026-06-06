@@ -183,6 +183,7 @@
     "export": "Exportar datos",
     "batchNsfw": "Activar NSFW",
     "batchNsfwDisable": "Desactivar NSFW",
+    "rowActionNotSupported": "El estado actual no admite esta acción",
     "batchRefresh": "Actualizar selección",
     "batchDisable": "Desactivar selección",
     "batchRestore": "Restaurar selección",

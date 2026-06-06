@@ -915,9 +915,9 @@ function _getValue(section, key, field) {
     : value;
 }
 
-function _getCurrentValue(section, key) {
+function _getCurrentValue(section, key, field) {
   const fp = _fullPath(section, key);
-  return fp in _dirty ? _dirty[fp] : _getValue(section, key);
+  return fp in _dirty ? _dirty[fp] : _getValue(section, key, field);
 }
 
 // ── Render ──────────────────────────────────────────────────────────────────
@@ -1117,8 +1117,9 @@ function renderRow(field, section, tabId) {
       'data-webui-link': 'true',
       onclick: () => window.open('/webui/login', '_blank', 'noopener,noreferrer'),
     });
+    btn._configField = field;
     btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 5h5v5"/><path d="M10 14 19 5"/><path d="M19 14v5h-14v-14h5"/></svg>';
-    btn.disabled = !Boolean(_getCurrentValue(section, field.key));
+    btn.disabled = !Boolean(_getCurrentValue(section, field.key, field));
     labelChildren.push(btn);
   }
 
@@ -1263,7 +1264,7 @@ function _refreshDirtyState({ autoNormalizeSelects = true, changedPaths = null }
 
   const webuiLinkBtn = document.querySelector('[data-webui-link="true"]');
   if (webuiLinkBtn) {
-    const enabled = Boolean(_getCurrentValue('app', 'webui_enabled'));
+    const enabled = Boolean(_getCurrentValue('app', 'webui_enabled', webuiLinkBtn._configField));
     webuiLinkBtn.disabled = !enabled;
     webuiLinkBtn.title = enabled ? '打开 WebUI' : '启用 WebUI 后可打开';
     webuiLinkBtn.setAttribute('aria-label', webuiLinkBtn.title);

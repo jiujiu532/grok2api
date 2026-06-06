@@ -184,6 +184,7 @@
     "export": "Export Data",
     "batchNsfw": "Enable NSFW",
     "batchNsfwDisable": "Disable NSFW",
+    "rowActionNotSupported": "Current status does not support this action",
     "batchRefresh": "Refresh Selected",
     "batchDisable": "Disable Selected",
     "batchRestore": "Restore Selected",
