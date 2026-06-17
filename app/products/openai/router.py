@@ -466,7 +466,7 @@ async def videos_create(
     prompt: Annotated[str, Form(...)],
     seconds: Annotated[int, Form()] = 6,
     size: Annotated[
-        Literal["720x1280", "1280x720", "1024x1024", "1024x1792", "1792x1024"], Form()
+        Literal["720x1280", "1280x720", "1024x1024", "1024x1792", "1792x1024", "9:16", "16:9", "1:1", "2:3", "3:2"], Form()
     ] = "720x1280",
     resolution_name: Annotated[Literal["480p", "720p"] | None, Form()] = None,
     preset: Annotated[
@@ -475,14 +475,23 @@ async def videos_create(
     input_reference: Annotated[
         list[UploadFile] | None, File(alias="input_reference[]")
     ] = None,
+    input_reference_single: Annotated[
+        UploadFile | None, File(alias="input_reference")
+    ] = None,
 ):
     from .video import create_video
 
-    references_payload = None
+    uploads: list[UploadFile] = []
     if input_reference:
+        uploads.extend(input_reference)
+    if input_reference_single:
+        uploads.append(input_reference_single)
+
+    references_payload = None
+    if uploads:
         references_payload = [
             {"image_url": await _upload_to_data_uri(f, param="input_reference")}
-            for f in input_reference[:7]
+            for f in uploads[:7]
         ]
 
     result = await create_video(
