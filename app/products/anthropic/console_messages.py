@@ -4,7 +4,7 @@
 """
 
 import asyncio
-from typing import Any, AsyncGenerator
+from typing import AsyncGenerator
 
 import orjson
 
@@ -12,7 +12,7 @@ from app.platform.logging.logger import logger
 from app.platform.config.snapshot import get_config
 from app.platform.errors import RateLimitError, UpstreamError
 from app.platform.runtime.clock import now_s
-from app.platform.tokens import estimate_prompt_tokens, estimate_tokens
+from app.platform.tokens import estimate_prompt_tokens, estimate_tokens, estimate_tool_call_tokens
 from app.control.account.enums import FeedbackKind
 from app.control.account.invalid_credentials import feedback_kind_for_error
 from app.control.account.runtime import get_refresh_service
@@ -25,6 +25,7 @@ from app.dataplane.reverse.protocol.xai_console_chat import (
 )
 from app.products._account_selection import reserve_account, selection_max_retries
 from app.products.openai.chat import _configured_retry_codes, _should_retry_upstream
+from app.products.openai._tool_sieve import ToolSieve
 
 
 def _sse(event: str, data: dict) -> str:
@@ -82,6 +83,7 @@ async def create(
     temperature: float,
     top_p: float,
     msg_id: str,
+    tool_names: list[str] | None = None,
 ) -> dict | AsyncGenerator[str, None]:
     """Console models /v1/messages handler (Anthropic format)."""
 
@@ -115,6 +117,12 @@ async def create(
                 _retry = False
                 adapter = ConsoleStreamAdapter()
                 text_buf: list[str] = []
+                sieve = ToolSieve(tool_names) if tool_names else None
+                tool_calls_emitted = False
+                tool_output_tokens = 0
+                text_started = False
+                block_index = 0
+                client_stream_started = False
 
                 try:
                     payload = build_console_payload(
@@ -127,71 +135,234 @@ async def create(
                     )
 
                     try:
-                        # message_start
-                        yield _sse("message_start", {
-                            "type": "message_start",
-                            "message": {
-                                "id": msg_id,
-                                "type": "message",
-                                "role": "assistant",
-                                "model": model,
-                                "content": [],
-                                "stop_reason": None,
-                                "usage": {"input_tokens": estimate_prompt_tokens(messages), "output_tokens": 0},
-                            },
-                        })
-                        yield _sse("ping", {"type": "ping"})
-
-                        # content_block_start
-                        yield _sse("content_block_start", {
-                            "type": "content_block_start",
-                            "index": 0,
-                            "content_block": {"type": "text", "text": ""},
-                        })
-
-                        yield ": heartbeat\n\n"
                         async for event_type, data in stream_console_chat(
                             token, payload, timeout_s=timeout_s
                         ):
+                            if tool_calls_emitted:
+                                break
+
                             tokens = adapter.feed(event_type, data)
                             for tok in tokens:
-                                text_buf.append(tok)
-                                yield _sse("content_block_delta", {
-                                    "type": "content_block_delta",
-                                    "index": 0,
-                                    "delta": {"type": "text_delta", "text": tok},
-                                })
+                                if sieve is not None:
+                                    safe_text, calls = sieve.feed(tok)
+                                    if calls is not None:
+                                        if text_started:
+                                            yield _sse("content_block_stop", {
+                                                "type": "content_block_stop",
+                                                "index": block_index,
+                                            })
+                                            block_index += 1
+                                            text_started = False
+                                        if not client_stream_started:
+                                            yield _sse("message_start", {
+                                                "type": "message_start",
+                                                "message": {
+                                                    "id": msg_id,
+                                                    "type": "message",
+                                                    "role": "assistant",
+                                                    "model": model,
+                                                    "content": [],
+                                                    "stop_reason": None,
+                                                    "usage": {"input_tokens": estimate_prompt_tokens(messages), "output_tokens": 0},
+                                                },
+                                            })
+                                            yield _sse("ping", {"type": "ping"})
+                                            yield ": heartbeat\n\n"
+                                            client_stream_started = True
+                                        for call in calls:
+                                            yield _sse("content_block_start", {
+                                                "type": "content_block_start",
+                                                "index": block_index,
+                                                "content_block": {
+                                                    "type": "tool_use",
+                                                    "id": call.call_id,
+                                                    "name": call.name,
+                                                    "input": {},
+                                                },
+                                            })
+                                            yield _sse("content_block_delta", {
+                                                "type": "content_block_delta",
+                                                "index": block_index,
+                                                "delta": {
+                                                    "type": "input_json_delta",
+                                                    "partial_json": call.arguments,
+                                                },
+                                            })
+                                            yield _sse("content_block_stop", {
+                                                "type": "content_block_stop",
+                                                "index": block_index,
+                                            })
+                                            block_index += 1
+                                        tool_output_tokens = estimate_tool_call_tokens(calls)
+                                        tool_calls_emitted = True
+                                        break
+                                    text_chunk = safe_text
+                                else:
+                                    text_chunk = tok
 
-                        # content_block_stop
-                        yield _sse("content_block_stop", {
-                            "type": "content_block_stop",
-                            "index": 0,
-                        })
+                                if text_chunk:
+                                    text_buf.append(text_chunk)
+                                    if not text_started:
+                                        text_started = True
+                                        if not client_stream_started:
+                                            yield _sse("message_start", {
+                                                "type": "message_start",
+                                                "message": {
+                                                    "id": msg_id,
+                                                    "type": "message",
+                                                    "role": "assistant",
+                                                    "model": model,
+                                                    "content": [],
+                                                    "stop_reason": None,
+                                                    "usage": {"input_tokens": estimate_prompt_tokens(messages), "output_tokens": 0},
+                                                },
+                                            })
+                                            yield _sse("ping", {"type": "ping"})
+                                            yield ": heartbeat\n\n"
+                                            client_stream_started = True
+                                        yield _sse("content_block_start", {
+                                            "type": "content_block_start",
+                                            "index": block_index,
+                                            "content_block": {"type": "text", "text": ""},
+                                        })
+                                    yield _sse("content_block_delta", {
+                                        "type": "content_block_delta",
+                                        "index": block_index,
+                                        "delta": {"type": "text_delta", "text": text_chunk},
+                                    })
 
-                        # message_delta
+                            if tool_calls_emitted:
+                                break
+
+                        if sieve is not None and not tool_calls_emitted:
+                            calls = sieve.flush()
+                            if calls:
+                                if text_started:
+                                    yield _sse("content_block_stop", {
+                                        "type": "content_block_stop",
+                                        "index": block_index,
+                                    })
+                                    block_index += 1
+                                    text_started = False
+                                if not client_stream_started:
+                                    yield _sse("message_start", {
+                                        "type": "message_start",
+                                        "message": {
+                                            "id": msg_id,
+                                            "type": "message",
+                                            "role": "assistant",
+                                            "model": model,
+                                            "content": [],
+                                            "stop_reason": None,
+                                            "usage": {"input_tokens": estimate_prompt_tokens(messages), "output_tokens": 0},
+                                        },
+                                    })
+                                    yield _sse("ping", {"type": "ping"})
+                                    yield ": heartbeat\n\n"
+                                    client_stream_started = True
+                                for call in calls:
+                                    yield _sse("content_block_start", {
+                                        "type": "content_block_start",
+                                        "index": block_index,
+                                        "content_block": {
+                                            "type": "tool_use",
+                                            "id": call.call_id,
+                                            "name": call.name,
+                                            "input": {},
+                                        },
+                                    })
+                                    yield _sse("content_block_delta", {
+                                        "type": "content_block_delta",
+                                        "index": block_index,
+                                        "delta": {
+                                            "type": "input_json_delta",
+                                            "partial_json": call.arguments,
+                                        },
+                                    })
+                                    yield _sse("content_block_stop", {
+                                        "type": "content_block_stop",
+                                        "index": block_index,
+                                    })
+                                    block_index += 1
+                                tool_output_tokens = estimate_tool_call_tokens(calls)
+                                tool_calls_emitted = True
+
                         full_text = "".join(text_buf)
-                        output_tokens = (
-                            adapter.usage.get("output_tokens", 0) if adapter.usage
-                            else estimate_tokens(full_text)
-                        )
-                        yield _sse("message_delta", {
-                            "type": "message_delta",
-                            "delta": {"stop_reason": "end_turn", "stop_sequence": None},
-                            "usage": {"output_tokens": output_tokens},
-                        })
-
-                        # message_stop
-                        yield _sse("message_stop", {"type": "message_stop"})
-                        yield "data: [DONE]\n\n"
-                        success = True
-                        logger.info(
-                            "console messages stream completed: model={} text_len={} attempt={}/{}",
-                            model, len(full_text), attempt + 1, max_retries + 1,
-                        )
+                        if tool_calls_emitted:
+                            if not client_stream_started:
+                                yield _sse("message_start", {
+                                    "type": "message_start",
+                                    "message": {
+                                        "id": msg_id,
+                                        "type": "message",
+                                        "role": "assistant",
+                                        "model": model,
+                                        "content": [],
+                                        "stop_reason": None,
+                                        "usage": {"input_tokens": estimate_prompt_tokens(messages), "output_tokens": 0},
+                                    },
+                                })
+                                yield _sse("ping", {"type": "ping"})
+                                yield ": heartbeat\n\n"
+                                client_stream_started = True
+                            yield _sse("message_delta", {
+                                "type": "message_delta",
+                                "delta": {"stop_reason": "tool_use", "stop_sequence": None},
+                                "usage": {"output_tokens": tool_output_tokens},
+                            })
+                            yield _sse("message_stop", {"type": "message_stop"})
+                            yield "data: [DONE]\n\n"
+                            success = True
+                            logger.info(
+                                "console messages stream tool_calls: model={} attempt={}/{}",
+                                model, attempt + 1, max_retries + 1,
+                            )
+                        else:
+                            if not client_stream_started:
+                                yield _sse("message_start", {
+                                    "type": "message_start",
+                                    "message": {
+                                        "id": msg_id,
+                                        "type": "message",
+                                        "role": "assistant",
+                                        "model": model,
+                                        "content": [],
+                                        "stop_reason": None,
+                                        "usage": {"input_tokens": estimate_prompt_tokens(messages), "output_tokens": 0},
+                                    },
+                                })
+                                yield _sse("ping", {"type": "ping"})
+                                yield ": heartbeat\n\n"
+                                client_stream_started = True
+                            if text_started:
+                                yield _sse("content_block_stop", {
+                                    "type": "content_block_stop",
+                                    "index": block_index,
+                                })
+                            output_tokens = (
+                                adapter.usage.get("output_tokens", 0) if adapter.usage
+                                else estimate_tokens(full_text)
+                            )
+                            yield _sse("message_delta", {
+                                "type": "message_delta",
+                                "delta": {"stop_reason": "end_turn", "stop_sequence": None},
+                                "usage": {"output_tokens": output_tokens},
+                            })
+                            yield _sse("message_stop", {"type": "message_stop"})
+                            yield "data: [DONE]\n\n"
+                            success = True
+                            logger.info(
+                                "console messages stream completed: model={} text_len={} attempt={}/{}",
+                                model, len(full_text), attempt + 1, max_retries + 1,
+                            )
 
                     except UpstreamError as exc:
                         fail_exc = exc
-                        if _should_retry_upstream(exc, retry_codes) and attempt < max_retries:
+                        if (
+                            not client_stream_started
+                            and _should_retry_upstream(exc, retry_codes)
+                            and attempt < max_retries
+                        ):
                             _retry = True
                             logger.warning(
                                 "console messages retry: attempt={}/{} status={}",

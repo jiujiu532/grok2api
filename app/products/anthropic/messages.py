@@ -30,7 +30,7 @@ from app.dataplane.reverse.protocol.tool_parser import parse_tool_calls
 
 from app.products.openai.chat import (
     _stream_chat, _extract_message, _resolve_image,
-    _quota_sync, _fail_sync, _parse_retry_codes, _feedback_kind, _log_task_exception,
+    _quota_sync, _fail_sync, _feedback_kind, _log_task_exception,
     _configured_retry_codes, _should_retry_upstream,
 )
 from app.products._account_selection import reserve_account, selection_max_retries
@@ -320,14 +320,19 @@ async def create(
     # -------------------------------------------------------------------------
     if spec.is_console_chat():
         from .console_messages import create as console_messages_create
+        console_messages = (
+            [{"role": "user", "content": internal_message}]
+            if tool_names else internal_messages
+        )
         return await console_messages_create(
             model=model,
-            messages=internal_messages,
+            messages=console_messages,
             stream=stream,
             emit_think=emit_think,
             temperature=temperature,
             top_p=top_p,
             msg_id=msg_id,
+            tool_names=tool_names,
         )
 
     # -------------------------------------------------------------------------
