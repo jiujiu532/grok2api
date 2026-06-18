@@ -62,8 +62,8 @@ class ImageEditRequest(BaseModel):
 class ResponsesCreateRequest(BaseModel):
     """OpenAI Responses API — /v1/responses.
 
-    Only model/input/instructions/stream/reasoning/temperature/top_p are acted on.
-    All other fields are accepted and silently discarded.
+    model/input/instructions/stream/reasoning/temperature/top_p are acted on.
+    tools/tool_choice are supported for tool-capable routes; unsupported fields are accepted and silently discarded.
     """
     model:                str
     input:                str | list[Any]
@@ -72,10 +72,10 @@ class ResponsesCreateRequest(BaseModel):
     reasoning:            dict[str, Any] | None = None
     temperature:          float | None         = None
     top_p:                float | None         = None
-    # silently ignored
-    max_output_tokens:    int | None            = None
     tools:                list[Any] | None      = None
     tool_choice:          Any | None            = None
+    # silently ignored
+    max_output_tokens:    int | None            = None
     previous_response_id: str | None            = None
     store:                bool | None           = None
     metadata:             dict[str, Any] | None = None

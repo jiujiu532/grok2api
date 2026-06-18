@@ -10,13 +10,11 @@
 import asyncio
 from typing import Any, AsyncGenerator
 
-import orjson
-
 from app.platform.logging.logger import logger
 from app.platform.config.snapshot import get_config
 from app.platform.errors import RateLimitError, UpstreamError
 from app.platform.runtime.clock import now_s
-from app.platform.tokens import estimate_prompt_tokens, estimate_tokens
+from app.platform.tokens import estimate_prompt_tokens, estimate_tokens, estimate_tool_call_tokens
 from app.control.account.enums import FeedbackKind
 from app.control.account.invalid_credentials import feedback_kind_for_error
 from app.control.account.runtime import get_refresh_service
@@ -24,13 +22,13 @@ from app.control.model.registry import resolve as resolve_model
 from app.dataplane.account.selector import current_strategy
 from app.dataplane.reverse.protocol.xai_console_chat import (
     build_console_payload,
+    client_function_tool_names,
     ConsoleStreamAdapter,
     stream_console_chat,
 )
 from app.products._account_selection import reserve_account, selection_max_retries
 from app.products.openai.chat import _configured_retry_codes, _should_retry_upstream
 from ._format import (
-    make_resp_id,
     make_resp_object,
     build_resp_usage,
     format_sse,
@@ -79,6 +77,69 @@ async def _fail_sync(token: str, mode_id: int, exc: BaseException | None = None)
         )
 
 
+def _message_added_event(message_id: str) -> str:
+    return format_sse("response.output_item.added", {
+        "type": "response.output_item.added",
+        "output_index": 0,
+        "item": {
+            "id": message_id,
+            "type": "message",
+            "role": "assistant",
+            "status": "in_progress",
+            "content": [],
+        },
+    })
+
+
+def _content_part_added_event(message_id: str) -> str:
+    return format_sse("response.content_part.added", {
+        "type": "response.content_part.added",
+        "item_id": message_id,
+        "output_index": 0,
+        "content_index": 0,
+        "part": {"type": "output_text", "text": "", "annotations": []},
+    })
+
+
+def _function_call_events(items: list[dict]) -> list[str]:
+    events: list[str] = []
+    for output_index, item in enumerate(items):
+        item_id = item["id"]
+        arguments = item.get("arguments") or "{}"
+        events.append(format_sse("response.output_item.added", {
+            "type": "response.output_item.added",
+            "output_index": output_index,
+            "item": {
+                "id": item_id,
+                "type": "function_call",
+                "call_id": item["call_id"],
+                "name": item["name"],
+                "arguments": "",
+                "status": "in_progress",
+            },
+        }))
+        events.append(format_sse("response.function_call_arguments.delta", {
+            "type": "response.function_call_arguments.delta",
+            "item_id": item_id,
+            "output_index": output_index,
+            "delta": arguments,
+        }))
+        events.append(format_sse("response.function_call_arguments.done", {
+            "type": "response.function_call_arguments.done",
+            "item_id": item_id,
+            "output_index": output_index,
+            "arguments": arguments,
+        }))
+        done_item = dict(item)
+        done_item["status"] = "completed"
+        events.append(format_sse("response.output_item.done", {
+            "type": "response.output_item.done",
+            "output_index": output_index,
+            "item": done_item,
+        }))
+    return events
+
+
 async def create(
     *,
     model: str,
@@ -90,6 +151,8 @@ async def create(
     response_id: str,
     reasoning_id: str,
     message_id: str,
+    tools: list[dict] | None = None,
+    tool_choice: Any = None,
 ) -> dict | AsyncGenerator[str, None]:
     """Console models /v1/responses handler."""
 
@@ -101,6 +164,7 @@ async def create(
 
     # reasoning effort 映射
     effort = "low" if emit_think else "none"
+    function_tool_names = client_function_tool_names(tools)
 
     from app.dataplane.account import _directory as _acct_dir
     if _acct_dir is None:
@@ -123,7 +187,7 @@ async def create(
                 success = False
                 fail_exc: BaseException | None = None
                 _retry = False
-                adapter = ConsoleStreamAdapter()
+                adapter = ConsoleStreamAdapter(function_tool_names=function_tool_names)
                 text_buf: list[str] = []
 
                 try:
@@ -134,6 +198,8 @@ async def create(
                         top_p=top_p,
                         reasoning_effort=effort,
                         stream=True,
+                        tools=tools,
+                        tool_choice=tool_choice,
                     )
 
                     try:
@@ -149,27 +215,14 @@ async def create(
                             "response": make_resp_object(response_id, model, "in_progress", []),
                         })
 
-                        # output_item.added (message)
-                        yield format_sse("response.output_item.added", {
-                            "type": "response.output_item.added",
-                            "output_index": 0,
-                            "item": {
-                                "id": message_id,
-                                "type": "message",
-                                "role": "assistant",
-                                "status": "in_progress",
-                                "content": [],
-                            },
-                        })
-
-                        # content_part.added
-                        yield format_sse("response.content_part.added", {
-                            "type": "response.content_part.added",
-                            "item_id": message_id,
-                            "output_index": 0,
-                            "content_index": 0,
-                            "part": {"type": "output_text", "text": "", "annotations": []},
-                        })
+                        # Delay message events while client function tools are active.
+                        # If a function_call appears, Responses output must stay function-call-only.
+                        client_function_tools_active = bool(function_tool_names)
+                        message_started = False
+                        if not client_function_tools_active:
+                            yield _message_added_event(message_id)
+                            yield _content_part_added_event(message_id)
+                            message_started = True
 
                         event_count = 0
                         yield ": heartbeat\n\n"
@@ -178,8 +231,15 @@ async def create(
                         ):
                             event_count += 1
                             tokens = adapter.feed(event_type, data)
+                            emitted_frame = False
                             for tok in tokens:
                                 text_buf.append(tok)
+                                if client_function_tools_active:
+                                    continue
+                                if not message_started:
+                                    yield _message_added_event(message_id)
+                                    yield _content_part_added_event(message_id)
+                                    message_started = True
                                 yield format_sse("response.output_text.delta", {
                                     "type": "response.output_text.delta",
                                     "item_id": message_id,
@@ -187,6 +247,9 @@ async def create(
                                     "content_index": 0,
                                     "delta": tok,
                                 })
+                                emitted_frame = True
+                            if client_function_tools_active and not emitted_frame:
+                                yield ": heartbeat\n\n"
 
                         logger.info(
                             "console responses stream raw: events={} text_tokens={} adapter_text_len={}",
@@ -195,6 +258,50 @@ async def create(
 
                         # 流结束
                         full_text = "".join(text_buf)
+                        function_items = adapter.function_call_items if client_function_tools_active else []
+
+                        # 原生 function_call 路径：本地重排 output_index 后输出标准事件。
+                        if function_items:
+                            for event in _function_call_events(function_items):
+                                yield event
+                            usage_data = adapter.usage
+                            input_tokens = (
+                                usage_data.get("input_tokens", 0) if usage_data
+                                else estimate_prompt_tokens(messages)
+                            )
+                            output_tokens = (
+                                usage_data.get("output_tokens", 0) if usage_data
+                                else estimate_tool_call_tokens(adapter.parsed_tool_calls)
+                            )
+                            yield format_sse("response.completed", {
+                                "type": "response.completed",
+                                "response": make_resp_object(
+                                    response_id, model, "completed", function_items,
+                                    usage=build_resp_usage(input_tokens, output_tokens),
+                                ),
+                            })
+                            yield "data: [DONE]\n\n"
+                            success = True
+                            logger.info(
+                                "console responses stream function_call: model={} calls={} attempt={}/{}",
+                                model, len(function_items), attempt + 1, max_retries + 1,
+                            )
+                            return
+
+                        if not message_started:
+                            yield _message_added_event(message_id)
+                            yield _content_part_added_event(message_id)
+                            message_started = True
+
+                        if client_function_tools_active:
+                            for tok in text_buf:
+                                yield format_sse("response.output_text.delta", {
+                                    "type": "response.output_text.delta",
+                                    "item_id": message_id,
+                                    "output_index": 0,
+                                    "content_index": 0,
+                                    "delta": tok,
+                                })
 
                         # output_text.done
                         yield format_sse("response.output_text.done", {
@@ -307,7 +414,7 @@ async def create(
         token = acct.token
         success = False
         fail_exc: BaseException | None = None
-        adapter = ConsoleStreamAdapter()
+        adapter = ConsoleStreamAdapter(function_tool_names=function_tool_names)
 
         try:
             payload = build_console_payload(
@@ -317,6 +424,8 @@ async def create(
                 top_p=top_p,
                 reasoning_effort=effort,
                 stream=True,
+                tools=tools,
+                tool_choice=tool_choice,
             )
 
             try:
@@ -331,6 +440,26 @@ async def create(
                     usage_data.get("input_tokens", 0) if usage_data
                     else estimate_prompt_tokens(messages)
                 )
+                function_items = adapter.function_call_items if function_tool_names else []
+                if function_items:
+                    output_tokens = (
+                        usage_data.get("output_tokens", 0) if usage_data
+                        else estimate_tool_call_tokens(adapter.parsed_tool_calls)
+                    )
+                    result = make_resp_object(
+                        response_id,
+                        model,
+                        "completed",
+                        function_items,
+                        usage=build_resp_usage(input_tokens, output_tokens),
+                    )
+                    success = True
+                    logger.info(
+                        "console responses non-stream function_call: model={} calls={}",
+                        model, len(function_items),
+                    )
+                    return result
+
                 output_tokens = (
                     usage_data.get("output_tokens", 0) if usage_data
                     else estimate_tokens(full_text)
