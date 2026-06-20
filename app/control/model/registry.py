@@ -28,6 +28,7 @@ MODELS: tuple[ModelSpec, ...] = (
 
     # --- 硬优先级反向选池 (heavy → super → basic) ---
     ModelSpec("grok-4.20-fast",                         ModeId.FAST,     Tier.BASIC, Capability.CHAT,       True, "Grok 4.20 Fast",          prefer_best=True),
+    ModelSpec("grok-4.2-fast",                          ModeId.FAST,     Tier.BASIC, Capability.CHAT,       True, "Grok 4.2 Fast",           prefer_best=True),
     ModelSpec("grok-4.3-fast",                          ModeId.FAST,     Tier.BASIC, Capability.CHAT,       True, "Grok 4.3 Fast",           prefer_best=True),
     ModelSpec("grok-4.20-auto",                         ModeId.AUTO,     Tier.SUPER, Capability.CHAT,       True, "Grok 4.20 Auto",          prefer_best=True),
     ModelSpec("grok-4.20-expert",                       ModeId.EXPERT,   Tier.SUPER, Capability.CHAT,       True, "Grok 4.20 Expert",        prefer_best=True),

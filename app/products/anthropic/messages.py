@@ -30,7 +30,7 @@ from app.dataplane.reverse.protocol.tool_parser import parse_tool_calls
 
 from app.products.openai.chat import (
     _stream_chat, _extract_message, _resolve_image,
-    _quota_sync, _fail_sync, _parse_retry_codes, _feedback_kind, _log_task_exception,
+    _quota_sync, _fail_sync, _feedback_kind, _log_task_exception,
     _configured_retry_codes, _should_retry_upstream,
 )
 from app.products._account_selection import reserve_account, selection_max_retries
@@ -286,13 +286,13 @@ async def create(
 
     cfg     = get_config()
     spec    = resolve_model(model)
-    mode_id = int(spec.mode_id)
 
     # Build internal message list
     internal_messages = _parse_anthropic_messages(messages, system)
     internal_message, files = _extract_message(internal_messages)
     if not internal_message.strip():
         raise UpstreamError("Empty message after extraction", status=400)
+    input_tokens = max(1, estimate_prompt_tokens(internal_message))
 
     # Tool injection
     tool_names: list[str] = []
@@ -373,7 +373,7 @@ async def create(
                             "model":       model,
                             "content":     [],
                             "stop_reason": None,
-                            "usage":       {"input_tokens": estimate_prompt_tokens(internal_message), "output_tokens": 0},
+                            "usage":       {"input_tokens": input_tokens, "output_tokens": 0},
                         },
                     })
                     yield _sse("ping", {"type": "ping"})
@@ -533,7 +533,7 @@ async def create(
                         yield _sse("message_delta", {
                             "type":  "message_delta",
                             "delta": tool_delta,
-                            "usage": {"output_tokens": tool_output_tokens},
+                            "usage": {"input_tokens": input_tokens, "output_tokens": tool_output_tokens},
                         })
                         yield _sse("message_stop", {"type": "message_stop"})
                         yield "data: [DONE]\n\n"
@@ -594,7 +594,7 @@ async def create(
                         yield _sse("message_delta", {
                             "type":  "message_delta",
                             "delta": msg_delta,
-                            "usage": {"output_tokens": out_tokens},
+                            "usage": {"input_tokens": input_tokens, "output_tokens": out_tokens},
                         })
                         yield _sse("message_stop", {"type": "message_stop"})
                         yield "data: [DONE]\n\n"
@@ -730,7 +730,7 @@ async def create(
 
     full_think = ("".join(adapter.thinking_buf) or "") if emit_think else ""
 
-    in_tokens  = estimate_prompt_tokens(internal_message)
+    in_tokens  = input_tokens
     out_tokens = estimate_tokens(full_text)
     if full_think:
         out_tokens += estimate_tokens(full_think)

@@ -3,13 +3,13 @@
 from typing import Any
 
 import orjson
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from app.platform.auth.middleware import verify_api_key
 from app.platform.errors import AppError, ValidationError
-from app.platform.logging.logger import logger
+from app.platform.tokens import estimate_prompt_tokens
 from app.control.model import registry as model_registry
 
 
@@ -49,6 +49,16 @@ class MessagesRequest(BaseModel):
     thinking:    Any = None          # {type:"enabled", budget_tokens:N} — used to enable thinking output
 
 
+class CountTokensRequest(BaseModel):
+    model_config = {"extra": "ignore"}
+
+    model:       str
+    messages:    list[dict]
+    system:      Any = None
+    tools:       list[dict] | None = None
+    tool_choice: Any = None
+
+
 # ---------------------------------------------------------------------------
 # SSE error wrapper
 # ---------------------------------------------------------------------------
@@ -75,6 +85,28 @@ async def _safe_sse_anthropic(stream):
 # ---------------------------------------------------------------------------
 # /v1/messages
 # ---------------------------------------------------------------------------
+
+@router.post("/messages/count_tokens", tags=[_TAG_MESSAGES])
+async def count_tokens_endpoint(req: CountTokensRequest):
+    spec = model_registry.get(req.model)
+    if spec is None or not spec.enabled:
+        raise ValidationError(
+            f"Model {req.model!r} does not exist or you do not have access to it.",
+            param="model", code="model_not_found",
+        )
+
+    payload: dict[str, Any] = {
+        "system": req.system,
+        "messages": req.messages,
+    }
+    if req.tools:
+        payload["tools"] = req.tools
+    if req.tool_choice is not None:
+        payload["tool_choice"] = req.tool_choice
+
+    input_tokens = max(1, estimate_prompt_tokens(payload))
+    return JSONResponse({"input_tokens": input_tokens})
+
 
 @router.post("/messages", tags=[_TAG_MESSAGES])
 async def messages_endpoint(req: MessagesRequest):

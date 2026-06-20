@@ -243,7 +243,7 @@ basic表示free账号，spuer和heavy 为付费
 
 | 模型名 | mode | 账号等级 | 备注 |
 | :-- | :-- | :-- | :-- |
-| `grok-4.20-fast` / `grok-4.3-fast` | fast | basic（优先高等级） | 
+| `grok-4.20-fast` / `grok-4.2-fast` / `grok-4.3-fast` | fast | basic（优先高等级） |
 | `grok-4.20-auto` | auto | super | 
 | `grok-4.20-expert` | expert | super | 
 | `grok-4.20-heavy` | heavy | heavy | |
@@ -320,6 +320,7 @@ basic表示free账号，spuer和heavy 为付费
 | `POST /v1/chat/completions` | 聊天 / 图像 / 视频统一入口 |
 | `POST /v1/responses` | OpenAI Responses API |
 | `POST /v1/messages` | Anthropic Messages API |
+| `POST /v1/messages/count_tokens` | Anthropic / Claude Code Token 计数 |
 | `POST /v1/images/generations` | 图像生成 |
 | `POST /v1/images/edits` | 图像编辑 |
 | `POST /v1/videos` | 异步视频任务 |

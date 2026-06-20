@@ -37,6 +37,14 @@ def _log_task_exception(task: "asyncio.Task") -> None:
         logger.warning("background task failed: task={} error={}", task.get_name(), exc)
 
 
+def _token_count(value: Any, fallback: int, *, minimum: int) -> int:
+    try:
+        count = int(value)
+    except (TypeError, ValueError):
+        count = fallback
+    return max(minimum, count)
+
+
 async def _quota_sync(token: str, mode_id: int) -> None:
     """Fire-and-forget: 成功调用后持久化配额扣减和 usage_use_count。
 
@@ -91,6 +99,7 @@ async def create(
     max_retries = selection_max_retries()
     retry_codes = _configured_retry_codes(cfg)
     effort = "low" if emit_think else "none"
+    input_tokens = max(1, estimate_prompt_tokens(messages))
 
     from app.dataplane.account import _directory as _acct_dir
     if _acct_dir is None:
@@ -137,7 +146,7 @@ async def create(
                                 "model": model,
                                 "content": [],
                                 "stop_reason": None,
-                                "usage": {"input_tokens": estimate_prompt_tokens(messages), "output_tokens": 0},
+                                "usage": {"input_tokens": input_tokens, "output_tokens": 0},
                             },
                         })
                         yield _sse("ping", {"type": "ping"})
@@ -171,13 +180,13 @@ async def create(
                         # message_delta
                         full_text = "".join(text_buf)
                         output_tokens = (
-                            adapter.usage.get("output_tokens", 0) if adapter.usage
-                            else estimate_tokens(full_text)
+                            _token_count(adapter.usage.get("output_tokens"), estimate_tokens(full_text), minimum=0)
+                            if adapter.usage else estimate_tokens(full_text)
                         )
                         yield _sse("message_delta", {
                             "type": "message_delta",
                             "delta": {"stop_reason": "end_turn", "stop_sequence": None},
-                            "usage": {"output_tokens": output_tokens},
+                            "usage": {"input_tokens": input_tokens, "output_tokens": output_tokens},
                         })
 
                         # message_stop
@@ -257,12 +266,12 @@ async def create(
                 full_text = adapter.full_text
                 usage_data = adapter.usage
                 input_tokens = (
-                    usage_data.get("input_tokens", 0) if usage_data
-                    else estimate_prompt_tokens(messages)
+                    _token_count(usage_data.get("input_tokens"), estimate_prompt_tokens(messages), minimum=1)
+                    if usage_data else input_tokens
                 )
                 output_tokens = (
-                    usage_data.get("output_tokens", 0) if usage_data
-                    else estimate_tokens(full_text)
+                    _token_count(usage_data.get("output_tokens"), estimate_tokens(full_text), minimum=0)
+                    if usage_data else estimate_tokens(full_text)
                 )
 
                 result = {

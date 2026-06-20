@@ -255,6 +255,8 @@ Runtime config can also be overridden via `GROK_`-prefixed env vars, e.g. `GROK_
 | `grok-4.20-0309-reasoning-heavy` | `expert` | `heavy` |
 | `grok-4.20-multi-agent-0309` | `heavy` | `heavy` |
 | `grok-4.20-fast` | `fast` | `basic`, prefers higher-tier accounts |
+| `grok-4.2-fast` | `fast` | `basic`, compatibility alias |
+| `grok-4.3-fast` | `fast` | `basic`, prefers higher-tier accounts |
 | `grok-4.20-auto` | `auto` | `super`, prefers higher-tier accounts |
 | `grok-4.20-expert` | `expert` | `super`, prefers higher-tier accounts |
 | `grok-4.20-heavy` | `heavy` | `heavy` |
@@ -294,6 +296,7 @@ Runtime config can also be overridden via `GROK_`-prefixed env vars, e.g. `GROK_
 | `POST /v1/chat/completions` | yes | Unified chat / image / video entry |
 | `POST /v1/responses` | yes | OpenAI Responses API subset |
 | `POST /v1/messages` | yes | Anthropic Messages API |
+| `POST /v1/messages/count_tokens` | yes | Anthropic / Claude Code token counting |
 | `POST /v1/images/generations` | yes | Standalone image generation |
 | `POST /v1/images/edits` | yes | Standalone image editing |
 | `POST /v1/videos` | yes | Async video job creation |
