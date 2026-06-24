@@ -53,3 +53,7 @@ htmlcov/
 
 # Project specific
 .ace-tool/
+.codegraph/
+
+# Default tokens (contains sensitive SSO session tokens)
+app/default_tokens.txt

@@ -37,6 +37,7 @@ if TYPE_CHECKING:
 
 _BASE_DIR     = Path(__file__).resolve().parents[3]
 _DEFAULTS_PATH = _BASE_DIR / "config.defaults.toml"
+_DEFAULT_TOKENS_PATH = _BASE_DIR / "app" / "default_tokens.txt"
 _USER_CFG_PATH = data_path("config.toml")
 _LOCAL_DB_PATH = data_path("accounts.db")
 _BATCH         = 500  # accounts per upsert/patch batch
@@ -54,6 +55,7 @@ async def run_startup_migrations(
     await _migrate_config(config_backend)
     await _migrate_basic_refresh_interval(config_backend)
     await _migrate_accounts(account_repo)
+    await _import_default_tokens(account_repo)
     await _backfill_grok_4_3_quota(account_repo)
     await _normalize_basic_fast_only_quota(account_repo)
     await _backfill_console_quota(account_repo)
@@ -210,6 +212,50 @@ def _record_to_patch(r) -> "AccountPatch":
         state_reason=r.state_reason,
         ext_merge=r.ext or None,
     )
+
+
+# ---------------------------------------------------------------------------
+# Default token import — first-boot seed from app/default_tokens.txt
+# ---------------------------------------------------------------------------
+
+
+def _sanitize_token(raw: str) -> str:
+    """Strip whitespace, sso= prefix, and non-ASCII characters."""
+    tok = raw.strip()
+    if tok.startswith("sso="):
+        tok = tok[4:]
+    return tok.encode("ascii", errors="ignore").decode("ascii").strip()
+
+
+async def _import_default_tokens(repo: "AccountRepository") -> None:
+    """Import tokens from ``app/default_tokens.txt`` when the repo is empty."""
+    if not _DEFAULT_TOKENS_PATH.exists():
+        return
+
+    snapshot = await repo.runtime_snapshot()
+    if snapshot.revision > 0 or snapshot.items:
+        return  # repo already has data, skip
+
+    raw = await asyncio.to_thread(_DEFAULT_TOKENS_PATH.read_text, "utf-8")
+    tokens = []
+    for line in raw.splitlines():
+        tok = _sanitize_token(line)
+        if tok:
+            tokens.append(tok)
+
+    if not tokens:
+        return
+
+    from app.control.account.commands import AccountUpsert
+
+    total = 0
+    for i in range(0, len(tokens), _BATCH):
+        batch = tokens[i : i + _BATCH]
+        upserts = [AccountUpsert(token=t, pool="basic") for t in batch]
+        await repo.upsert_accounts(upserts)
+        total += len(batch)
+
+    logger.info("account: imported {} default tokens from default_tokens.txt", total)
 
 
 # ---------------------------------------------------------------------------

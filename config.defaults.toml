@@ -5,7 +5,7 @@ app_key = "grok2api"
 # 应用访问地址
 app_url = ""
 # API 调用密钥
-api_key = ""
+api_key = "grok2api"
 # 启用 WebUI
 webui_enabled = false
 # WebUI 访问密码
