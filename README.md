@@ -29,6 +29,8 @@
 
 </div>
 
+[English](./README_EN.md) | **中文**
+
 > [!NOTE]
 > 本项目仅供学习与研究交流。请务必遵守 Grok 的使用条款及当地法律法规，不得用于非法用途。
 
@@ -448,7 +450,7 @@ curl http://localhost:8000/v1/chat/completions \
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=jiujiu532/grok2api&type=Date)](https://star-history.com/#jiujiu532/grok2api&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=Dithob/grok2api&type=Date)](https://star-history.com/#Dithob/grok2api&Date)
 
 ---
 
