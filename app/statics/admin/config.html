@@ -519,6 +519,16 @@ const SCHEMA_DEF = [
         ]
       },
       {
+        title: '已删除账号清理',
+        section: 'account.cleanup',
+        fields: [
+          { key: 'deleted_retention_days', label: '保留天数', type: 'number', min: 0, desc: '软删除账号保留天数。默认 7 天，达到保留期后每日批量物理删除。' },
+          { key: 'run_at', label: '每日清理时间', type: 'text', desc: '每天触发一次批量清理，格式 HH:MM。建议设置在低峰时段，默认 03:30。' },
+          { key: 'batch_size', label: '每批删除数量', type: 'number', min: 1, desc: '每批物理删除的账号数。分批处理可降低 SQLite 写锁占用时间，默认 5000。' },
+          { key: 'vacuum', label: '删除后回收空间', type: 'bool', desc: '实际删除账号后执行一次 VACUUM 回收数据库文件空间。该操作可能短暂占用 SQLite，建议保持低峰执行。' },
+        ]
+      },
+      {
         title: '批量操作并发', titleKey: 'config.schema.groups.batchConcurrency',
         section: 'batch',
         fields: [

@@ -128,6 +128,7 @@ def _serialize_record(r) -> dict:
         "status":      r.status,
         "quota":       _quota_brief(r.quota) if isinstance(r.quota, dict) else {},
         "use_count":   r.usage_use_count or 0,
+        "fail_count":  r.usage_fail_count or 0,
         "last_used_at": r.last_use_at,
         "tags":        r.tags or [],
     }
@@ -166,6 +167,40 @@ def _schedule_auto_nsfw(
     _fire_and_forget(_enable_nsfw_imported(repo, unique_tokens))
 
 
+async def _list_all_records(repo: "AccountRepository") -> list:
+    items: list = []
+    page_num = 1
+    while True:
+        page = await repo.list_accounts(ListAccountsQuery(page=page_num, page_size=2000))
+        items.extend(page.items)
+        if page_num >= page.total_pages or not page.items:
+            break
+        page_num += 1
+    return items
+
+
+async def _list_token_payloads(repo: "AccountRepository") -> list[dict]:
+    fast_list = getattr(repo, "list_token_payloads", None)
+    if callable(fast_list):
+        return await fast_list()
+    return [_serialize_record(r) for r in await _list_all_records(repo)]
+
+
+async def _list_invalid_tokens(repo: "AccountRepository") -> list[str]:
+    fast_list = getattr(repo, "list_invalid_tokens", None)
+    if callable(fast_list):
+        return await fast_list()
+    return [
+        item["token"]
+        for item in await _list_token_payloads(repo)
+        if item.get("status") not in (
+            AccountStatus.ACTIVE.value,
+            AccountStatus.COOLING.value,
+            AccountStatus.DISABLED.value,
+        )
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -173,16 +208,7 @@ def _schedule_auto_nsfw(
 @router.get("/tokens")
 async def list_tokens(repo: "AccountRepository" = Depends(get_repo)):
     """Return flat token list."""
-    all_items: list = []
-    page_num = 1
-    while True:
-        page = await repo.list_accounts(ListAccountsQuery(page=page_num, page_size=2000))
-        all_items.extend(page.items)
-        if page_num * 2000 >= page.total:
-            break
-        page_num += 1
-
-    return _json({"tokens": [_serialize_record(r) for r in all_items]})
+    return _json({"tokens": await _list_token_payloads(repo)})
 
 
 @router.post("/tokens")
@@ -286,22 +312,7 @@ async def delete_tokens(
 
 @router.delete("/tokens/invalid")
 async def delete_invalid_tokens(repo: "AccountRepository" = Depends(get_repo)):
-    tokens: list[str] = []
-    page_num = 1
-    while True:
-        page = await repo.list_accounts(ListAccountsQuery(page=page_num, page_size=2000))
-        tokens.extend(
-            r.token
-            for r in page.items
-            if r.status not in (
-                AccountStatus.ACTIVE,
-                AccountStatus.COOLING,
-                AccountStatus.DISABLED,
-            )
-        )
-        if page_num >= page.total_pages or not page.items:
-            break
-        page_num += 1
+    tokens = await _list_invalid_tokens(repo)
 
     if not tokens:
         return _json({"deleted": 0})

@@ -25,6 +25,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.control.account.cleanup import run_daily_deleted_account_cleanup
 from app.platform.logging.logger import logger, setup_logging, reload_logging
 from app.platform.config.snapshot import config as _config
 from app.platform.errors import AppError
@@ -279,6 +280,22 @@ async def lifespan(app: FastAPI):
         _console_recovery_loop(), name="console-expired-recovery"
     ) if is_leader else None
 
+    def _deleted_cleanup_settings() -> dict[str, object]:
+        return {
+            "retention_days": max(
+                0,
+                _config.get_int("account.cleanup.deleted_retention_days", 7),
+            ),
+            "run_at": _config.get_str("account.cleanup.run_at", "03:30"),
+            "batch_size": max(1, _config.get_int("account.cleanup.batch_size", 5000)),
+            "vacuum": _config.get_bool("account.cleanup.vacuum", True),
+        }
+
+    deleted_cleanup_task = asyncio.create_task(
+        run_daily_deleted_account_cleanup(repo, _deleted_cleanup_settings),
+        name="deleted-account-cleanup",
+    ) if is_leader else None
+
     logger.info("application startup completed")
     yield
 
@@ -296,6 +313,12 @@ async def lifespan(app: FastAPI):
         console_recovery_task.cancel()
         try:
             await console_recovery_task
+        except asyncio.CancelledError:
+            pass
+    if deleted_cleanup_task is not None:
+        deleted_cleanup_task.cancel()
+        try:
+            await deleted_cleanup_task
         except asyncio.CancelledError:
             pass
     sync_task.cancel()
