@@ -89,7 +89,10 @@ class AdminBatchReviewFixTests(unittest.IsolatedAsyncioTestCase):
         body = orjson.loads(response.body)
         self.assertEqual(repo.requested_tokens, ["active-token", "disabled-token"])
         self.assertEqual(refresh_svc.refreshed_tokens, ["active-token"])
-        self.assertEqual(body["summary"], {"total": 1, "ok": 1, "fail": 0})
+        self.assertEqual(
+            body["summary"],
+            {"total": 1, "ok": 1, "fail": 0, "expired": 0, "transient": 0},
+        )
 
     async def test_batch_refresh_rejects_only_non_manageable_explicit_tokens(self):
         repo = _Repo()

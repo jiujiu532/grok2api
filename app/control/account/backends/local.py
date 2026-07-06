@@ -1,4 +1,4 @@
-"""SQLite account repository (WAL mode, single-process default backend)."""
+"""SQLite account repository (WAL-preferred, single-process default backend)."""
 
 import asyncio
 import json
@@ -37,21 +37,32 @@ class LocalAccountRepository:
     def __init__(self, db_path: Path) -> None:
         self._path = Path(db_path)
         self._lock = asyncio.Lock()
+        self._prefer_wal = True
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self._path, check_same_thread=False)
-        conn.row_factory = sqlite3.Row
-        try:
-            conn.execute("PRAGMA journal_mode=WAL")
-            conn.execute("PRAGMA synchronous=NORMAL")
-        except sqlite3.OperationalError:
-            # WAL 模式在 NFS / 某些 Docker bind mount 文件系统上不支持，
-            # 静默 fallback 到默认 DELETE journal mode，功能不受影响。
-            pass
+        def _open() -> sqlite3.Connection:
+            conn = sqlite3.connect(self._path, check_same_thread=False)
+            conn.row_factory = sqlite3.Row
+            return conn
+
+        conn = _open()
+        if self._prefer_wal:
+            try:
+                conn.execute("PRAGMA journal_mode=WAL")
+                conn.execute("PRAGMA synchronous=NORMAL")
+            except sqlite3.OperationalError:
+                # WAL 模式在 NFS / 某些 Docker bind mount 文件系统上不支持，
+                # 失败后的连接可能继续报 disk I/O error，重开后回退到 DELETE。
+                self._prefer_wal = False
+                conn.close()
+                conn = _open()
+                conn.execute("PRAGMA journal_mode=DELETE")
+        else:
+            conn.execute("PRAGMA journal_mode=DELETE")
         conn.execute("PRAGMA busy_timeout=5000")
         conn.execute("PRAGMA foreign_keys=ON")
         return conn

@@ -1,7 +1,9 @@
+import sqlite3
 import tempfile
 import unittest
 from contextlib import closing
 from pathlib import Path
+from unittest.mock import patch
 
 import orjson
 
@@ -73,6 +75,43 @@ class _PagedRepo:
         self.deleted = tokens
 
 
+class _WalFailConnection:
+    def __init__(self):
+        self.row_factory = None
+        self.closed = False
+
+    def execute(self, sql: str, *args, **kwargs):
+        if sql == "PRAGMA journal_mode=WAL":
+            raise sqlite3.OperationalError("disk I/O error")
+        raise AssertionError(f"broken WAL connection reused: {sql}")
+
+    def close(self):
+        self.closed = True
+
+
+class _WalRetryForbiddenConnection:
+    def __init__(self, conn):
+        self._conn = conn
+        self.closed = False
+
+    @property
+    def row_factory(self):
+        return self._conn.row_factory
+
+    @row_factory.setter
+    def row_factory(self, value):
+        self._conn.row_factory = value
+
+    def execute(self, sql: str, *args, **kwargs):
+        if sql == "PRAGMA journal_mode=WAL":
+            raise AssertionError("WAL retried after fallback")
+        return self._conn.execute(sql, *args, **kwargs)
+
+    def close(self):
+        self.closed = True
+        self._conn.close()
+
+
 class AdminTokenListPerformanceTests(unittest.IsolatedAsyncioTestCase):
     async def test_list_tokens_uses_compact_payload_fast_path(self):
         repo = _FastListRepo()
@@ -119,8 +158,6 @@ class AdminTokenListPerformanceTests(unittest.IsolatedAsyncioTestCase):
             await repo.initialize()
             await repo.upsert_accounts([AccountUpsert(token="tok-1", pool="basic")])
 
-            import sqlite3
-
             with closing(sqlite3.connect(db_path)) as conn:
                 conn.execute(
                     "UPDATE accounts SET quota_auto = '', quota_console = 'not-json'"
@@ -139,8 +176,6 @@ class AdminTokenListPerformanceTests(unittest.IsolatedAsyncioTestCase):
             repo = LocalAccountRepository(db_path)
             await repo.initialize()
 
-            import sqlite3
-
             with closing(sqlite3.connect(db_path)) as conn:
                 indexes = {
                     row[0]
@@ -151,13 +186,62 @@ class AdminTokenListPerformanceTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("idx_acc_live_updated", indexes)
 
+    async def test_local_repository_initializes_after_wal_disk_io_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "accounts.db"
+            repo = LocalAccountRepository(db_path)
+            broken = _WalFailConnection()
+            real_conn = sqlite3.connect(db_path, check_same_thread=False)
+
+            try:
+                with patch(
+                    "app.control.account.backends.local.sqlite3.connect",
+                    side_effect=[broken, real_conn],
+                ):
+                    await repo.initialize()
+            finally:
+                real_conn.close()
+
+            with closing(sqlite3.connect(db_path)) as conn:
+                tables = {
+                    row[0]
+                    for row in conn.execute(
+                        "SELECT name FROM sqlite_master WHERE type = 'table'"
+                    )
+                }
+
+        self.assertTrue(broken.closed)
+        self.assertIn("accounts", tables)
+
+    async def test_local_repository_does_not_retry_wal_after_fallback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "accounts.db"
+            repo = LocalAccountRepository(db_path)
+            broken = _WalFailConnection()
+            real_conn = sqlite3.connect(db_path, check_same_thread=False)
+            retry_forbidden = _WalRetryForbiddenConnection(
+                sqlite3.connect(db_path, check_same_thread=False)
+            )
+
+            try:
+                with patch(
+                    "app.control.account.backends.local.sqlite3.connect",
+                    side_effect=[broken, real_conn, retry_forbidden],
+                ):
+                    await repo.initialize()
+                    revision = await repo.get_revision()
+            finally:
+                real_conn.close()
+                retry_forbidden.close()
+
+        self.assertEqual(revision, 0)
+        self.assertTrue(broken.closed)
+
     async def test_local_repository_token_payload_query_uses_live_updated_index(self):
         with tempfile.TemporaryDirectory() as tmp:
             db_path = Path(tmp) / "accounts.db"
             repo = LocalAccountRepository(db_path)
             await repo.initialize()
-
-            import sqlite3
 
             with closing(sqlite3.connect(db_path)) as conn:
                 plan = [
