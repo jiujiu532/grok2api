@@ -38,6 +38,7 @@ class LocalAccountRepository:
         self._path = Path(db_path)
         self._lock = asyncio.Lock()
         self._prefer_wal = True
+        self._fallback_journal_mode = "DELETE"
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -60,22 +61,47 @@ class LocalAccountRepository:
                 self._prefer_wal = False
                 conn.close()
                 conn = _open()
-                conn.execute("PRAGMA journal_mode=DELETE")
+                self._apply_fallback_journal(conn)
         else:
-            conn.execute("PRAGMA journal_mode=DELETE")
-        conn.execute("PRAGMA busy_timeout=5000")
-        conn.execute("PRAGMA foreign_keys=ON")
+            self._apply_fallback_journal(conn)
+        self._apply_connection_pragmas(conn)
         return conn
+
+    @staticmethod
+    def _apply_connection_pragmas(conn: sqlite3.Connection) -> None:
+        try:
+            conn.execute("PRAGMA busy_timeout=5000")
+            conn.execute("PRAGMA foreign_keys=ON")
+        except Exception:
+            conn.close()
+            raise
+
+    def _apply_fallback_journal(self, conn: sqlite3.Connection) -> None:
+        try:
+            conn.execute(f"PRAGMA journal_mode={self._fallback_journal_mode}")
+        except Exception:
+            conn.close()
+            raise
 
     def _init_sync(self) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            self._init_schema_once()
-        except sqlite3.OperationalError as exc:
-            if not self._prefer_wal or not self._is_disk_io_error(exc):
+        # 部分 Docker bind mount 会通过 journal PRAGMA，却在首次建表写入时
+        # 才报 disk I/O error；初始化语句幂等，因此只在此阶段逐级降级重试。
+        for _ in range(3):
+            try:
+                self._init_schema_once()
+                return
+            except sqlite3.OperationalError as exc:
+                if not self._is_disk_io_error(exc):
+                    raise
+                if self._prefer_wal:
+                    self._prefer_wal = False
+                    self._fallback_journal_mode = "DELETE"
+                    continue
+                if self._fallback_journal_mode == "DELETE":
+                    self._fallback_journal_mode = "MEMORY"
+                    continue
                 raise
-            self._prefer_wal = False
-            self._init_schema_once()
 
     @staticmethod
     def _is_disk_io_error(exc: sqlite3.OperationalError) -> bool:

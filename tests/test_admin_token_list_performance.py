@@ -298,6 +298,43 @@ class AdminTokenListPerformanceTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(repo._prefer_wal)
         self.assertIn("accounts", tables)
 
+    async def test_local_repository_retries_memory_journal_when_delete_write_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "accounts.db"
+            repo = LocalAccountRepository(db_path)
+            wal_broken = _WalFailConnection()
+            delete_conn = _WalWriteFailConnection(
+                sqlite3.connect(db_path, check_same_thread=False)
+            )
+            memory_conn = _WalRetryForbiddenConnection(
+                sqlite3.connect(db_path, check_same_thread=False)
+            )
+
+            try:
+                with patch(
+                    "app.control.account.backends.local.sqlite3.connect",
+                    side_effect=[wal_broken, delete_conn, memory_conn],
+                ):
+                    await repo.initialize()
+            finally:
+                delete_conn.close()
+                memory_conn.close()
+
+            with closing(sqlite3.connect(db_path)) as conn:
+                tables = {
+                    row[0]
+                    for row in conn.execute(
+                        "SELECT name FROM sqlite_master WHERE type = 'table'"
+                    )
+                }
+
+        self.assertTrue(wal_broken.closed)
+        self.assertTrue(delete_conn.closed)
+        self.assertTrue(memory_conn.closed)
+        self.assertFalse(repo._prefer_wal)
+        self.assertEqual(repo._fallback_journal_mode, "MEMORY")
+        self.assertIn("accounts", tables)
+
     async def test_local_repository_token_payload_query_uses_live_updated_index(self):
         with tempfile.TemporaryDirectory() as tmp:
             db_path = Path(tmp) / "accounts.db"
