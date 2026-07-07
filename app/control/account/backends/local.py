@@ -69,6 +69,19 @@ class LocalAccountRepository:
 
     def _init_sync(self) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            self._init_schema_once()
+        except sqlite3.OperationalError as exc:
+            if not self._prefer_wal or not self._is_disk_io_error(exc):
+                raise
+            self._prefer_wal = False
+            self._init_schema_once()
+
+    @staticmethod
+    def _is_disk_io_error(exc: sqlite3.OperationalError) -> bool:
+        return "disk i/o error" in str(exc).lower()
+
+    def _init_schema_once(self) -> None:
         with closing(self._connect()) as conn:
             conn.executescript(f"""
                 CREATE TABLE IF NOT EXISTS {_META} (

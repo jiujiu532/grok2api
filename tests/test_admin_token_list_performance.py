@@ -107,6 +107,33 @@ class _WalRetryForbiddenConnection:
             raise AssertionError("WAL retried after fallback")
         return self._conn.execute(sql, *args, **kwargs)
 
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+    def close(self):
+        self.closed = True
+        self._conn.close()
+
+
+class _WalWriteFailConnection:
+    def __init__(self, conn):
+        self._conn = conn
+        self.closed = False
+
+    @property
+    def row_factory(self):
+        return self._conn.row_factory
+
+    @row_factory.setter
+    def row_factory(self, value):
+        self._conn.row_factory = value
+
+    def execute(self, sql: str, *args, **kwargs):
+        return self._conn.execute(sql, *args, **kwargs)
+
+    def executescript(self, sql: str):
+        raise sqlite3.OperationalError("disk I/O error")
+
     def close(self):
         self.closed = True
         self._conn.close()
@@ -236,6 +263,40 @@ class AdminTokenListPerformanceTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(revision, 0)
         self.assertTrue(broken.closed)
+
+    async def test_local_repository_retries_delete_journal_when_wal_write_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "accounts.db"
+            repo = LocalAccountRepository(db_path)
+            wal_conn = _WalWriteFailConnection(
+                sqlite3.connect(db_path, check_same_thread=False)
+            )
+            delete_conn = _WalRetryForbiddenConnection(
+                sqlite3.connect(db_path, check_same_thread=False)
+            )
+
+            try:
+                with patch(
+                    "app.control.account.backends.local.sqlite3.connect",
+                    side_effect=[wal_conn, delete_conn],
+                ):
+                    await repo.initialize()
+            finally:
+                wal_conn.close()
+                delete_conn.close()
+
+            with closing(sqlite3.connect(db_path)) as conn:
+                tables = {
+                    row[0]
+                    for row in conn.execute(
+                        "SELECT name FROM sqlite_master WHERE type = 'table'"
+                    )
+                }
+
+        self.assertTrue(wal_conn.closed)
+        self.assertTrue(delete_conn.closed)
+        self.assertFalse(repo._prefer_wal)
+        self.assertIn("accounts", tables)
 
     async def test_local_repository_token_payload_query_uses_live_updated_index(self):
         with tempfile.TemporaryDirectory() as tmp:
