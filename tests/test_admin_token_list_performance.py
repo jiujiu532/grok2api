@@ -139,6 +139,37 @@ class _WalWriteFailConnection:
         self._conn.close()
 
 
+class _LiveIndexFailConnection:
+    def __init__(self, conn):
+        self._conn = conn
+        self.closed = False
+
+    @property
+    def row_factory(self):
+        return self._conn.row_factory
+
+    @row_factory.setter
+    def row_factory(self, value):
+        self._conn.row_factory = value
+
+    def execute(self, sql: str, *args, **kwargs):
+        if "idx_acc_live_updated" in sql:
+            raise sqlite3.OperationalError("disk I/O error")
+        return self._conn.execute(sql, *args, **kwargs)
+
+    def executescript(self, sql: str):
+        if "idx_acc_live_updated" in sql:
+            raise sqlite3.OperationalError("disk I/O error")
+        return self._conn.executescript(sql)
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+    def close(self):
+        self.closed = True
+        self._conn.close()
+
+
 class AdminTokenListPerformanceTests(unittest.IsolatedAsyncioTestCase):
     async def test_list_tokens_uses_compact_payload_fast_path(self):
         repo = _FastListRepo()
@@ -334,6 +365,42 @@ class AdminTokenListPerformanceTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(repo._prefer_wal)
         self.assertEqual(repo._fallback_journal_mode, "MEMORY")
         self.assertIn("accounts", tables)
+
+    async def test_local_repository_tolerates_live_updated_index_write_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "accounts.db"
+            repo = LocalAccountRepository(db_path)
+            real_connect = sqlite3.connect
+            wrapped: list[_LiveIndexFailConnection] = []
+
+            def connect(*args, **kwargs):
+                conn = _LiveIndexFailConnection(real_connect(*args, **kwargs))
+                wrapped.append(conn)
+                return conn
+
+            with patch(
+                "app.control.account.backends.local.sqlite3.connect",
+                side_effect=connect,
+            ):
+                await repo.initialize()
+
+            with closing(sqlite3.connect(db_path)) as conn:
+                tables = {
+                    row[0]
+                    for row in conn.execute(
+                        "SELECT name FROM sqlite_master WHERE type = 'table'"
+                    )
+                }
+                indexes = {
+                    row[0]
+                    for row in conn.execute(
+                        "SELECT name FROM sqlite_master WHERE type = 'index'"
+                    )
+                }
+
+        self.assertTrue(all(conn.closed for conn in wrapped))
+        self.assertIn("accounts", tables)
+        self.assertNotIn("idx_acc_live_updated", indexes)
 
     async def test_local_repository_token_payload_query_uses_live_updated_index(self):
         with tempfile.TemporaryDirectory() as tmp:

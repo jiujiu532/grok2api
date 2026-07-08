@@ -148,12 +148,29 @@ class LocalAccountRepository:
                     ON {_TBL} (pool, status);
                 CREATE INDEX IF NOT EXISTS idx_acc_deleted
                     ON {_TBL} (deleted_at) WHERE deleted_at IS NOT NULL;
-                CREATE INDEX IF NOT EXISTS idx_acc_live_updated
-                    ON {_TBL} (updated_at DESC) WHERE deleted_at IS NULL;
             """)
             self._ensure_column_sync(conn, "quota_grok_4_3", "TEXT NOT NULL DEFAULT '{}'")
             self._ensure_column_sync(conn, "quota_console", "TEXT NOT NULL DEFAULT '{}'")
             conn.commit()
+            self._create_optional_indexes(conn)
+
+    def _create_optional_indexes(self, conn: sqlite3.Connection) -> None:
+        # 账号列表性能索引不是启动所需的核心 schema。issue #31 的 Docker
+        # bind mount 反馈显示，核心建表之外的额外索引可能触发 disk I/O error；
+        # 因此核心 schema 先提交，性能索引失败时允许降级为慢查询而不是启动失败。
+        try:
+            conn.execute(
+                f"CREATE INDEX IF NOT EXISTS idx_acc_live_updated "
+                f"ON {_TBL} (updated_at DESC) WHERE deleted_at IS NULL"
+            )
+            conn.commit()
+        except sqlite3.OperationalError as exc:
+            if not self._is_disk_io_error(exc):
+                raise
+            try:
+                conn.rollback()
+            except sqlite3.Error:
+                pass
 
     @staticmethod
     def _ensure_column_sync(conn: sqlite3.Connection, name: str, ddl: str) -> None:
