@@ -366,6 +366,45 @@ class AdminTokenListPerformanceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(repo._fallback_journal_mode, "MEMORY")
         self.assertIn("accounts", tables)
 
+    async def test_local_repository_retries_no_lock_when_memory_write_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "accounts.db"
+            repo = LocalAccountRepository(db_path)
+            real_connect = sqlite3.connect
+            calls: list[tuple[tuple, dict]] = []
+
+            def connect(*args, **kwargs):
+                calls.append((args, kwargs))
+                if len(calls) <= 3:
+                    return _WalWriteFailConnection(
+                        real_connect(db_path, check_same_thread=False)
+                    )
+                return real_connect(*args, **kwargs)
+
+            with patch(
+                "app.control.account.backends.local.sqlite3.connect",
+                side_effect=connect,
+            ):
+                await repo.initialize()
+                revision = await repo.get_revision()
+
+            with closing(sqlite3.connect(db_path)) as conn:
+                tables = {
+                    row[0]
+                    for row in conn.execute(
+                        "SELECT name FROM sqlite_master WHERE type = 'table'"
+                    )
+                }
+
+        self.assertFalse(repo._prefer_wal)
+        self.assertEqual(repo._fallback_journal_mode, "MEMORY")
+        self.assertIn("nolock=1", calls[3][0][0])
+        self.assertTrue(calls[3][1]["uri"])
+        self.assertNotIn("nolock=1", str(calls[-1][0][0]))
+        self.assertNotIn("uri", calls[-1][1])
+        self.assertEqual(revision, 0)
+        self.assertIn("accounts", tables)
+
     async def test_local_repository_tolerates_live_updated_index_write_failure(self):
         with tempfile.TemporaryDirectory() as tmp:
             db_path = Path(tmp) / "accounts.db"

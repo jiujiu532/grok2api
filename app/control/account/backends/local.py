@@ -44,9 +44,18 @@ class LocalAccountRepository:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _connect(self) -> sqlite3.Connection:
+    def _connect(self, *, no_lock: bool = False) -> sqlite3.Connection:
         def _open() -> sqlite3.Connection:
-            conn = sqlite3.connect(self._path, check_same_thread=False)
+            if no_lock:
+                # 最后兜底才启用 nolock=1：它绕过 SQLite 文件锁，只用于 issue #31 这类
+                # Docker bind mount 在所有 journal 模式下首次建库都报 disk I/O error 的环境。
+                conn = sqlite3.connect(
+                    self._no_lock_uri(),
+                    uri=True,
+                    check_same_thread=False,
+                )
+            else:
+                conn = sqlite3.connect(self._path, check_same_thread=False)
             conn.row_factory = sqlite3.Row
             return conn
 
@@ -66,6 +75,9 @@ class LocalAccountRepository:
             self._apply_fallback_journal(conn)
         self._apply_connection_pragmas(conn)
         return conn
+
+    def _no_lock_uri(self) -> str:
+        return f"{self._path.resolve().as_uri()}?mode=rwc&nolock=1"
 
     @staticmethod
     def _apply_connection_pragmas(conn: sqlite3.Connection) -> None:
@@ -87,9 +99,10 @@ class LocalAccountRepository:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         # 部分 Docker bind mount 会通过 journal PRAGMA，却在首次建表写入时
         # 才报 disk I/O error；初始化语句幂等，因此只在此阶段逐级降级重试。
-        for _ in range(3):
+        no_lock = False
+        for _ in range(4):
             try:
-                self._init_schema_once()
+                self._init_schema_once(no_lock=no_lock)
                 return
             except sqlite3.OperationalError as exc:
                 if not self._is_disk_io_error(exc):
@@ -101,14 +114,19 @@ class LocalAccountRepository:
                 if self._fallback_journal_mode == "DELETE":
                     self._fallback_journal_mode = "MEMORY"
                     continue
+                if not no_lock:
+                    # MEMORY journal 仍失败时，剩余高概率是宿主文件锁/挂载语义异常；
+                    # no-lock 有并发风险，因此只在初始化幂等 SQL 的最后一次重试启用。
+                    no_lock = True
+                    continue
                 raise
 
     @staticmethod
     def _is_disk_io_error(exc: sqlite3.OperationalError) -> bool:
         return "disk i/o error" in str(exc).lower()
 
-    def _init_schema_once(self) -> None:
-        with closing(self._connect()) as conn:
+    def _init_schema_once(self, *, no_lock: bool = False) -> None:
+        with closing(self._connect(no_lock=no_lock)) as conn:
             conn.executescript(f"""
                 CREATE TABLE IF NOT EXISTS {_META} (
                     key   TEXT PRIMARY KEY,
