@@ -70,6 +70,27 @@ async def _filter_manageable_tokens(repo: "AccountRepository", tokens: list[str]
     return [token for token in unique_tokens if (record := by_token.get(token)) and is_manageable(record)]
 
 
+async def _filter_renewable_tokens(repo: "AccountRepository", tokens: list[str]) -> list[str]:
+    """Accounts eligible for renew: not deleted and not operator-disabled.
+
+    Includes EXPIRED so false-positive expiry can be re-probed and restored.
+    """
+    from app.control.account.enums import AccountStatus
+
+    unique_tokens = list(dict.fromkeys(tokens))
+    records = await repo.get_accounts(unique_tokens)
+    by_token = {r.token: r for r in records}
+    renewable: list[str] = []
+    for token in unique_tokens:
+        record = by_token.get(token)
+        if record is None or record.is_deleted():
+            continue
+        if record.status == AccountStatus.DISABLED:
+            continue
+        renewable.append(token)
+    return renewable
+
+
 def _json(data: Any, status_code: int = 200) -> Response:
     return Response(content=orjson.dumps(data), media_type="application/json", status_code=status_code)
 
@@ -308,6 +329,42 @@ async def batch_refresh(
     if all_manageable:
         logger.info("admin batch refresh all manageable: token_count={} concurrency={}", len(tokens), c)
     return await _dispatch(tokens, _refresh_one, use_async=async_mode, concurrency=c, repo=repo)
+
+
+@router.post("/renew")
+async def batch_renew(
+    req: BatchRequest,
+    async_mode: bool = Query(False, alias="async"),
+    concurrency: int | None = Query(None, ge=1),
+    repo: "AccountRepository" = Depends(get_repo),
+    refresh_svc: "AccountRefreshService" = Depends(get_refresh_svc),
+):
+    """Re-probe selected accounts (including EXPIRED) and restore on success."""
+    tokens = [t.strip() for t in req.tokens if t.strip()]
+    if not tokens:
+        raise ValidationError("No tokens provided", param="tokens")
+
+    requested_count = len(tokens)
+    tokens = await _filter_renewable_tokens(repo, tokens)
+    skipped_count = requested_count - len(tokens)
+    if skipped_count:
+        logger.info("admin batch renew skipped non-renewable tokens: skipped_count={}", skipped_count)
+    if not tokens:
+        raise ValidationError("No renewable tokens available", param="tokens")
+
+    async def _renew_one(token: str) -> dict:
+        result = await refresh_svc.renew_tokens([token])
+        if not result.refreshed:
+            raise UpstreamError("未获取到真实配额数据，续期失败")
+        return {
+            "refreshed": result.refreshed,
+            "recovered": result.recovered,
+            "expired": result.expired,
+        }
+
+    c = _concurrency(concurrency, "batch.refresh_concurrency")
+    logger.info("admin batch renew: token_count={} concurrency={}", len(tokens), c)
+    return await _dispatch(tokens, _renew_one, use_async=async_mode, concurrency=c, repo=repo)
 
 
 @router.post("/cache-clear")

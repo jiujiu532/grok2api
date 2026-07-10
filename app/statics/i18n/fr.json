@@ -306,7 +306,18 @@
       "disabled": "Désactivé",
       "expired": "Expiré",
       "invalid": "Anormal"
-    }
+    },
+    "batchRenew": "Renouveler la sélection",
+    "batchExport": "Exporter la sélection",
+    "actionRenew": "Renouveler",
+    "renewing": "Renouvellement de {n} comptes…",
+    "renewDone": "Renouvellement terminé : {ok} réussis, {fail} échoués",
+    "renewFailed": "Échec du renouvellement",
+    "noRenewableAccounts": "Aucun compte renouvelable (les comptes désactivés ne peuvent pas l’être)",
+    "batchRenewConfirmTitle": "Renouveler les comptes",
+    "batchRenewConfirmBody": "Renouveler les <b>{n}</b> comptes sélectionnés ?<br><small style=\"color:var(--fg-muted)\">Les identifiants amont seront revérifiés. Les comptes expirés encore valides seront rétablis en actif.</small>",
+    "exportDone": "{n} comptes exportés",
+    "exportSelectedEmpty": "Sélectionnez d’abord les comptes à exporter"
   },
   "config": {
     "pageTitle": "Grok2API - Gestion de la Configuration",

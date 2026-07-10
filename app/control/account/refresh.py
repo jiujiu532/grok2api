@@ -256,6 +256,58 @@ class AccountRefreshService:
             agg.merge(r)
         return agg
 
+    async def renew_tokens(self, tokens: list[str]) -> RefreshResult:
+        """Re-validate accounts (including EXPIRED) and restore on success.
+
+        Unlike :meth:`refresh_tokens`, this path intentionally includes
+        ``EXPIRED`` accounts so operators can re-probe credentials after a
+        false-positive expiry. Operator-disabled accounts stay skipped.
+        """
+        records = [
+            r
+            for r in await self._repo.get_accounts(tokens)
+            if not r.is_deleted() and r.status != AccountStatus.DISABLED
+        ]
+        if not records:
+            return RefreshResult()
+
+        concurrency = get_config("account.refresh.usage_concurrency", 15)
+        results = await run_batch(
+            records,
+            self._renew_one,
+            concurrency=concurrency,
+        )
+        agg = RefreshResult()
+        for r in results:
+            agg.merge(r)
+        return agg
+
+    async def _renew_one(self, record: AccountRecord) -> RefreshResult:
+        """Refresh one account and promote EXPIRED → ACTIVE when probe succeeds."""
+        was_expired = record.status == AccountStatus.EXPIRED
+        result = await self._refresh_one(record, bootstrap=True)
+        if not result.refreshed:
+            return result
+
+        if was_expired:
+            from .commands import AccountPatch
+
+            await self._repo.patch_accounts(
+                [
+                    AccountPatch(
+                        token=record.token,
+                        status=AccountStatus.ACTIVE,
+                        clear_failures=True,
+                    )
+                ]
+            )
+            result.recovered = 1
+            logger.info(
+                "account renewed from expired: token={}...",
+                record.token[:10],
+            )
+        return result
+
     # ------------------------------------------------------------------
     # Per-account refresh
     # ------------------------------------------------------------------

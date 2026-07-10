@@ -464,6 +464,74 @@
     .row-icon-btn.is-loading svg {
       animation:spin .85s linear infinite;
     }
+    .row-text-btn {
+      height:22px;
+      padding:0 8px;
+      border-radius:999px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:4px;
+      color:#6b5b2e;
+      background:#f7f1e2;
+      border:1px solid #eadfbf;
+      font-size:11px;
+      font-weight:600;
+      line-height:1;
+      white-space:nowrap;
+      flex:0 0 auto;
+    }
+    .row-text-btn:hover {
+      color:#4f4320;
+      background:#f1e8cf;
+      border-color:#dfd0a4;
+    }
+    .row-text-btn:disabled,
+    .row-text-btn.is-loading {
+      opacity:.65;
+      pointer-events:none;
+    }
+    .row-text-btn svg {
+      width:12px;
+      height:12px;
+      stroke:currentColor;
+      stroke-linecap:round;
+      stroke-linejoin:round;
+      fill:none;
+    }
+    .row-text-btn.is-loading svg {
+      animation:spin .85s linear infinite;
+    }
+    .toolbar-text-btn {
+      height:28px;
+      padding:0 10px;
+      border-radius:999px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:5px;
+      color:#6b5b2e;
+      background:#f7f1e2;
+      border:1px solid #eadfbf;
+      font-size:12px;
+      font-weight:600;
+      line-height:1;
+      white-space:nowrap;
+      flex:0 0 auto;
+    }
+    .toolbar-text-btn:hover {
+      color:#4f4320;
+      background:#f1e8cf;
+      border-color:#dfd0a4;
+    }
+    .toolbar-text-btn svg {
+      width:13px;
+      height:13px;
+      stroke:currentColor;
+      stroke-linecap:round;
+      stroke-linejoin:round;
+      fill:none;
+    }
     .row-action {
       color:#929292;
       font-size:11px;
@@ -931,6 +999,10 @@
       <button type="button" onclick="doExport()" id="btn-export" class="toolbar-icon-btn">
         <svg viewBox="0 0 24 24" stroke-width="1.8"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
       </button>
+      <button type="button" onclick="batchExportSel()" id="btn-export-sel" class="toolbar-text-btn" style="display:none">
+        <svg viewBox="0 0 24 24" stroke-width="1.8"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+        <span data-i18n="account.batchExport">导出选中</span>
+      </button>
       <button type="button" onclick="batchNSFWAll()" id="btn-nsfw-all" class="row-nsfw-btn">
         <svg viewBox="0 0 20 20" aria-hidden="true">
           <circle cx="10" cy="10" r="7.25"/>
@@ -952,6 +1024,10 @@
       </button>
       <button type="button" onclick="batchRefreshSel()" id="btn-refresh" class="toolbar-icon-btn" style="display:none">
         <svg viewBox="0 0 24 24" stroke-width="1.8"><path d="M20 11a8 8 0 0 0-14.6-4.6"/><path d="M4 4v5h5"/><path d="M4 13a8 8 0 0 0 14.6 4.6"/><path d="M20 20v-5h-5"/></svg>
+      </button>
+      <button type="button" onclick="batchRenewSel()" id="btn-renew" class="toolbar-text-btn" style="display:none">
+        <svg viewBox="0 0 24 24" stroke-width="1.8"><path d="M12 6v6l3.5 2"/><circle cx="12" cy="12" r="9"/><path d="M16.5 7.5 20 4"/><path d="M20 4v4h-4"/></svg>
+        <span data-i18n="account.batchRenew">续期选中</span>
       </button>
       <button type="button" onclick="batchDisableSel()" id="btn-disable" class="toolbar-icon-btn" style="display:none">
         <svg viewBox="0 0 24 24" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><path d="M8.5 8.5 15.5 15.5"/></svg>
@@ -1129,6 +1205,7 @@ const PAGE_SIZE_OPTIONS = [50, 100, 200, 500, 1000, 2000];
 let allTokens = [], curStatus = 'all', curNsfw = 'all', curPool = 'all', curPage = 1, pageSize = loadSavedPageSize();
 const sel = new Set();
 const refreshingTokens = new Set();
+const renewingTokens = new Set();
 let _cb = null;
 let _editingToken = '';
 let _filterMenuBound = false;
@@ -1155,11 +1232,13 @@ function applyAccountI18n() {
   const toolbarTips = [
     ['btn-filter', 'account.filter', '筛选'],
     ['btn-export', 'account.export', '导出数据'],
+    ['btn-export-sel', 'account.batchExport', '导出选中'],
     ['btn-nsfw-all', 'account.batchNsfwAll', '全部开启 NSFW'],
     ['btn-refresh-all', 'account.refreshAllManageable', '重新测试全部正常账户'],
     ['btn-delete-invalid-all', 'account.deleteInvalidAll', '删除全部异常'],
     ['btn-nsfw', 'account.batchNsfw', '开启 NSFW'],
     ['btn-refresh', 'account.batchRefresh', '刷新选中'],
+    ['btn-renew', 'account.batchRenew', '续期选中'],
     ['btn-disable', 'account.batchDisable', '禁用选中'],
     ['btn-restore', 'account.batchRestore', '恢复选中'],
     ['btn-delete', 'account.batchDelete', '删除选中'],
@@ -1284,6 +1363,9 @@ function getTokenView() {
     const nsfwEnabled = (token.tags || []).includes('nsfw');
     const invalid = isInvalidStatus(token.status);
     const disabled = isDisabledStatus(token.status);
+    // Only active/cooling can still be maintained or return to service soon.
+    // Disabled / expired / other abnormal accounts must not inflate available quota.
+    const countsTowardQuota = isManageableStatus(token.status);
     const matchesPool = curPool === 'all' || pool === curPool;
     const matchesStatus = curStatus === 'all'
       || (curStatus === 'invalid' ? invalid : curStatus === 'disabled' ? disabled : token.status === curStatus);
@@ -1292,26 +1374,29 @@ function getTokenView() {
     poolsSet.add(pool);
     const successCount = token.use_count || 0;
     const failCount = token.fail_count || 0;
+    // Historical call counters still cover the whole pool (including disabled).
     stats.success += successCount;
     stats.fail += failCount;
     stats.calls += successCount + failCount;
-    stats.qa += quota.auto?.remaining || 0;
-    stats.qf += quota.fast?.remaining || 0;
-    stats.qe += quota.expert?.remaining || 0;
-    stats.qh += quota.heavy?.remaining || 0;
-    stats.qc += quota.console?.remaining || 0;
+    if (countsTowardQuota) {
+      stats.qa += Number(quota.auto?.remaining) || 0;
+      stats.qf += Number(quota.fast?.remaining) || 0;
+      stats.qe += Number(quota.expert?.remaining) || 0;
+      stats.qh += Number(quota.heavy?.remaining) || 0;
+      stats.qc += Number(quota.console?.remaining) || 0;
+    }
 
     if (token.status === 'active') stats.active += 1;
-    if (token.status === 'cooling') stats.cooling += 1;
-    if (invalid) stats.invalid += 1;
-    if (disabled) stats.disabled += 1;
+    else if (token.status === 'cooling') stats.cooling += 1;
+    else if (disabled) stats.disabled += 1;
+    else if (invalid) stats.invalid += 1;
 
     if (matchesPool && matchesNsfw) {
       statusCounts.all += 1;
       if (token.status === 'active') statusCounts.active += 1;
-      if (token.status === 'cooling') statusCounts.cooling += 1;
-      if (invalid) statusCounts.invalid += 1;
-      if (disabled) statusCounts.disabled += 1;
+      else if (token.status === 'cooling') statusCounts.cooling += 1;
+      else if (disabled) statusCounts.disabled += 1;
+      else if (invalid) statusCounts.invalid += 1;
     }
 
     if (matchesPool && matchesStatus) {
@@ -1507,6 +1592,8 @@ function rowHtml(t) {
   const isDisabled = t.status === 'disabled';
   const canManageNsfw = isManageableStatus(t.status);
   const isRefreshing = refreshingTokens.has(t.token);
+  const isRenewing = renewingTokens.has(t.token);
+  const canRenew = !isDisabled;
   const success = t.use_count || 0;
   const fail = t.fail_count || 0;
   const nsfwBtn = isNsfw
@@ -1547,6 +1634,10 @@ function rowHtml(t) {
       </button>
       <button onclick="refreshOne('${xe(t.token)}')" class="row-icon-btn${isRefreshing ? ' is-loading' : ''}" data-tip="${xe(isRefreshing ? tr('account.refreshing', { n: 1 }, '正在刷新 1 个账户…') : tr('account.actionRefresh', null, '刷新 Usage'))}" aria-label="${xe(tr('account.actionRefresh', null, '刷新 Usage'))}">
         <svg viewBox="0 0 24 24" stroke-width="1.8"><path d="M20 11a8 8 0 0 0-14.6-4.6"/><path d="M4 4v5h5"/><path d="M4 13a8 8 0 0 0 14.6 4.6"/><path d="M20 20v-5h-5"/></svg>
+      </button>
+      <button onclick="${canRenew ? `renewOne('${xe(t.token)}')` : 'void 0'}" class="row-text-btn${isRenewing ? ' is-loading' : ''}" ${canRenew ? '' : 'disabled'} data-tip="${xe(canRenew ? (isRenewing ? tr('account.renewing', { n: 1 }, '正在续期 1 个账户…') : tr('account.actionRenew', null, '续期')) : tr('account.rowActionNotSupported', null, '当前状态不支持此操作'))}" aria-label="${xe(canRenew ? tr('account.actionRenew', null, '续期') : tr('account.rowActionNotSupported', null, '当前状态不支持此操作'))}">
+        <svg viewBox="0 0 24 24" stroke-width="1.8"><path d="M12 6v6l3.5 2"/><circle cx="12" cy="12" r="9"/><path d="M16.5 7.5 20 4"/><path d="M20 4v4h-4"/></svg>
+        <span>${xe(tr('account.actionRenew', null, '续期'))}</span>
       </button>
       <button onclick="openEdit('${xe(t.token)}')" class="row-icon-btn" data-tip="${xe(tr('account.actionEdit', null, '编辑'))}" aria-label="${xe(tr('account.actionEdit', null, '编辑'))}">
         <svg viewBox="0 0 24 24" stroke-width="1.8"><path d="m4 20 4.5-1 9.5-9.5-3.5-3.5L5 15.5z"/><path d="m13.5 5.5 3.5 3.5"/></svg>
@@ -1634,9 +1725,9 @@ function toggleRow(el) {
 }
 function updateBatchBtns() {
   const show = sel.size > 0;
-  const globalBtns = ['btn-nsfw-all','btn-refresh-all','btn-delete-invalid-all'];
-  const selectionBtns = ['btn-nsfw','btn-refresh','btn-disable','btn-restore','btn-delete','btn-delete-invalid'];
-  
+  const globalBtns = ['btn-export','btn-nsfw-all','btn-refresh-all','btn-delete-invalid-all'];
+  const selectionBtns = ['btn-export-sel','btn-nsfw','btn-refresh','btn-renew','btn-disable','btn-restore','btn-delete','btn-delete-invalid'];
+
   globalBtns.forEach(id => document.getElementById(id).style.display = show ? 'none' : '');
   selectionBtns.forEach(id => document.getElementById(id).style.display = show ? '' : 'none');
 }
@@ -1820,21 +1911,42 @@ async function saveTokens(pool, newToks, autoNsfw, modalId, pendingMessage, succ
 }
 
 // ── Export ─────────────────────────────────────────────────────────────────
-function doExport() {
-  const tokens = filtered();
-  if (!tokens.length) return showToast(tr('account.exportEmpty', null, '当前没有可导出的 Token'), 'error');
+function selectedTokens() {
+  if (!sel.size) return [];
+  // Preserve list order and ignore stale selections that no longer exist.
+  return allTokens.filter(t => sel.has(t.token));
+}
+
+function openExportDialog(tokens, suffix) {
+  if (!tokens.length) {
+    return showToast(tr('account.exportEmpty', null, '当前没有可导出的 Token'), 'error');
+  }
   openModal('modal-export');
   document.getElementById('exp-count').textContent = tokens.length;
   document.getElementById('exp-json-btn').onclick = () => {
     closeModal('modal-export');
     const out = {};
-    tokens.forEach(t => (out[t.pool||'basic'] = out[t.pool||'basic']||[]).push({token:t.token,tags:t.tags||[]}));
-    _download(JSON.stringify(out,null,2), `tokens-${currentFilterSuffix()}.json`, 'application/json');
+    tokens.forEach(t => (out[t.pool || 'basic'] = out[t.pool || 'basic'] || []).push({ token: t.token, tags: t.tags || [] }));
+    _download(JSON.stringify(out, null, 2), `tokens-${suffix}.json`, 'application/json');
+    showToast(tr('account.exportDone', { n: tokens.length }, `已导出 ${tokens.length} 个账户`), 'success');
   };
   document.getElementById('exp-txt-btn').onclick = () => {
     closeModal('modal-export');
-    _download(tokens.map(t => t.token).join('\n'), `tokens-${currentFilterSuffix()}.txt`, 'text/plain');
+    _download(tokens.map(t => t.token).join('\n'), `tokens-${suffix}.txt`, 'text/plain');
+    showToast(tr('account.exportDone', { n: tokens.length }, `已导出 ${tokens.length} 个账户`), 'success');
   };
+}
+
+function doExport() {
+  openExportDialog(filtered(), currentFilterSuffix());
+}
+
+function batchExportSel() {
+  const tokens = selectedTokens();
+  if (!tokens.length) {
+    return showToast(tr('account.exportSelectedEmpty', null, '请先勾选要导出的账户'), 'error');
+  }
+  openExportDialog(tokens, `selected-${tokens.length}`);
 }
 
 function currentFilterSuffix() {
@@ -1916,9 +2028,9 @@ async function _runBatch(endpoint, tokens, label, onDone) {
   }
   _batchStarting = true;
   const btnCancel = document.getElementById('btn-batch-cancel');
-  const globalActionIds = ['btn-nsfw-all','btn-refresh-all','btn-delete-invalid-all'];
+  const globalActionIds = ['btn-export','btn-nsfw-all','btn-refresh-all','btn-delete-invalid-all'];
   globalActionIds.forEach(id => document.getElementById(id).style.display = 'none');
-  ['btn-nsfw','btn-refresh','btn-disable','btn-restore','btn-delete','btn-delete-invalid'].forEach(id =>
+  ['btn-export-sel','btn-nsfw','btn-refresh','btn-renew','btn-disable','btn-restore','btn-delete','btn-delete-invalid'].forEach(id =>
     document.getElementById(id).style.display = 'none');
   btnCancel.style.display = '';
 
@@ -2096,6 +2208,70 @@ async function batchRefreshSel() {
       if (transient > 0) msg += `，临时失败 ${transient}`;
       showToast(msg, fail > 0 ? 'warning' : 'success');
     }
+  );
+}
+
+// ── Renew ──────────────────────────────────────────────────────────────────
+function renewableTokens(tokens) {
+  const wanted = new Set(tokens);
+  return allTokens
+    .filter(t => wanted.has(t.token) && !isDisabledStatus(t.status))
+    .map(t => t.token);
+}
+
+async function renewOne(token) {
+  if (renewingTokens.has(token)) return;
+  renewingTokens.add(token);
+  renderTable();
+  try {
+    showToast(tr('account.renewing', { n: 1 }, '正在续期 1 个账户…'), 'info');
+    const d = await _api('POST', '/batch/renew', { tokens: [token] });
+    const recovered = d.results
+      ? Object.values(d.results).reduce((n, item) => n + (item?.recovered || 0), 0)
+      : 0;
+    showToast(
+      tr(
+        'account.renewDone',
+        { ok: d.summary?.ok ?? 0, fail: d.summary?.fail ?? 0, recovered },
+        `续期完成：成功 ${d.summary?.ok ?? 0}，失败 ${d.summary?.fail ?? 0}${recovered ? `，恢复 ${recovered}` : ''}`,
+      ),
+      (d.summary?.fail ?? 0) > 0 ? 'warning' : 'success',
+    );
+    await load();
+  } catch (e) {
+    showToast(`${tr('account.renewFailed', null, '续期失败')}: ${e.message}`, 'error');
+  } finally {
+    renewingTokens.delete(token);
+    renderTable();
+  }
+}
+
+async function batchRenewSel() {
+  if (!sel.size) return;
+  const tokens = renewableTokens([...sel]);
+  if (!tokens.length) {
+    return showToast(tr('account.noRenewableAccounts', null, '没有可续期的账户（已禁用账号不可续期）'), 'error');
+  }
+  const n = tokens.length;
+  openConfirm(
+    tr('account.batchRenewConfirmTitle', null, '批量续期账号'),
+    tr(
+      'account.batchRenewConfirmBody',
+      { n },
+      `确认续期选中的 <b>${n}</b> 个账户？<br><small style="color:var(--fg-muted)">将重新探测上游凭证；若账号此前为异常/过期且凭证仍有效，会自动恢复为正常。</small>`,
+    ),
+    async () => _runBatch(
+      '/batch/renew',
+      tokens,
+      tr('account.renewing', { n }, `正在续期 ${n} 个账户…`),
+      (ok, fail, s) => {
+        const expired = s?.expired ?? 0, transient = s?.transient ?? (fail - expired);
+        let msg = tr('account.renewDone', { ok, fail, recovered: 0 }, `续期完成：成功 ${ok}，失败 ${fail}`);
+        if (expired > 0) msg += `，异常 ${expired}`;
+        if (transient > 0) msg += `，临时失败 ${transient}`;
+        showToast(msg, fail > 0 ? 'warning' : 'success');
+      },
+    ),
   );
 }
 

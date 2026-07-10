@@ -306,7 +306,18 @@
       "disabled": "Desactivada",
       "expired": "Expirada",
       "invalid": "Anómalo"
-    }
+    },
+    "batchRenew": "Renovar seleccionados",
+    "batchExport": "Exportar seleccionados",
+    "actionRenew": "Renovar",
+    "renewing": "Renovando {n} cuentas…",
+    "renewDone": "Renovación completada: {ok} correctas, {fail} fallidas",
+    "renewFailed": "Error al renovar",
+    "noRenewableAccounts": "No hay cuentas renovables (las deshabilitadas no se pueden renovar)",
+    "batchRenewConfirmTitle": "Renovar cuentas",
+    "batchRenewConfirmBody": "¿Renovar las <b>{n}</b> cuentas seleccionadas?<br><small style=\"color:var(--fg-muted)\">Se volverán a comprobar las credenciales. Las cuentas caducadas con credenciales válidas se restaurarán a activas.</small>",
+    "exportDone": "Se exportaron {n} cuentas",
+    "exportSelectedEmpty": "Primero selecciona las cuentas a exportar"
   },
   "config": {
     "pageTitle": "Grok2API - Gestión de Configuración",
