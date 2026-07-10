@@ -306,7 +306,18 @@
       "disabled": "Deaktiviert",
       "expired": "Abgelaufen",
       "invalid": "Fehlerhaft"
-    }
+    },
+    "batchRenew": "Auswahl erneuern",
+    "batchExport": "Auswahl exportieren",
+    "actionRenew": "Erneuern",
+    "renewing": "{n} Konten werden erneuert…",
+    "renewDone": "Erneuerung abgeschlossen: {ok} erfolgreich, {fail} fehlgeschlagen",
+    "renewFailed": "Erneuerung fehlgeschlagen",
+    "noRenewableAccounts": "Keine erneuerbaren Konten (deaktivierte Konten können nicht erneuert werden)",
+    "batchRenewConfirmTitle": "Konten erneuern",
+    "batchRenewConfirmBody": "Die ausgewählten <b>{n}</b> Konten erneuern?<br><small style=\"color:var(--fg-muted)\">Upstream-Anmeldedaten werden erneut geprüft. Abgelaufene Konten mit gültigen Anmeldedaten werden wieder aktiviert.</small>",
+    "exportDone": "{n} Konten exportiert",
+    "exportSelectedEmpty": "Bitte zuerst Konten zum Export auswählen"
   },
   "config": {
     "pageTitle": "Grok2API - Konfigurationsverwaltung",

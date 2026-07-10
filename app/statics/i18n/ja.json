@@ -306,7 +306,18 @@
       "disabled": "無効化",
       "expired": "期限切れ",
       "invalid": "異常"
-    }
+    },
+    "batchRenew": "選択を更新",
+    "batchExport": "選択をエクスポート",
+    "actionRenew": "更新",
+    "renewing": "{n} 件のアカウントを更新中…",
+    "renewDone": "更新完了：成功 {ok}、失敗 {fail}",
+    "renewFailed": "更新に失敗しました",
+    "noRenewableAccounts": "更新可能なアカウントがありません（無効化中は更新不可）",
+    "batchRenewConfirmTitle": "アカウントを更新",
+    "batchRenewConfirmBody": "選択した <b>{n}</b> 件のアカウントを更新しますか？<br><small style=\"color:var(--fg-muted)\">上流の認証情報を再検証します。有効な認証情報の期限切れアカウントは正常状態に復帰します。</small>",
+    "exportDone": "{n} 件のアカウントをエクスポートしました",
+    "exportSelectedEmpty": "先にエクスポートするアカウントを選択してください"
   },
   "config": {
     "pageTitle": "Grok2API - 構成管理",
