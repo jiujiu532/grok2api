@@ -23,18 +23,33 @@
     "cache": "缓存管理",
     "languageLabel": "语言",
     "logout": "退出登录",
-    "versionDialogTitle": "版本信息",
+    "versionDialogTitle": "在线更新",
     "versionCurrent": "当前版本",
     "versionLatest": "最新版本",
     "versionPublishedAt": "发布时间",
     "versionUpToDate": "当前已经是最新版本。",
     "versionUpdateAvailable": "发现新版本可用。",
     "versionChecking": "正在检查更新...",
-    "versionRefresh": "检查更新",
+    "versionRefresh": "立即检查",
     "versionUnavailable": "查询更新失败。",
     "versionNotesEmpty": "暂无更新说明。",
     "versionOpenRelease": "发布详情",
-    "versionClose": "关闭"
+    "versionClose": "关闭",
+    "versionApply": "安全更新并重启",
+    "versionApplying": "正在安全更新...",
+    "versionApplyOk": "已安全合并上游。",
+    "versionApplyBlockedDirty": "本地有未提交改动，已拒绝自动更新，避免覆盖。",
+    "versionApplyConflict": "检测到合并冲突，已中止。请查看日志后让 agent 协助合并。",
+    "versionApplyFailed": "安全更新失败。",
+    "versionApplyUpToDate": "本地已是最新，无需合并。",
+    "versionApplyNeedRestart": "合并成功，但自动重启未调度成功，请手动重启服务。",
+    "versionConflictReport": "冲突报告",
+    "versionInfoSection": "版本信息",
+    "versionBuildType": "构建类型",
+    "versionNotes": "更新内容",
+    "versionNotesFor": "查看 {version} 更新内容",
+    "versionCheckFailed": "检查更新失败",
+    "versionApplyRestarting": "已安全合并，服务正在自动重启以加载新代码。"
   },
   "dashboard": {
     "pageTitle": "Grok2API - 仪表盘",
@@ -438,9 +453,7 @@
       "disabled": "禁用",
       "expired": "过期",
       "invalid": "异常"
-    },
-    "autoNsfwOnImport": "导入后自动开启 NSFW",
-    "autoNsfwHint": "需要额外时间检测账户状态"
+    }
   },
   "config": {
     "pageTitle": "Grok2API - 配置管理",

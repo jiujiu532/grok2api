@@ -11,6 +11,7 @@ from app.control.account.backends.factory import get_repository_backend
 from app.dataplane.account.selector import current_strategy
 from app.platform.meta import get_project_version
 from app.platform.observability import http_metrics, process_health
+from app.platform.source_update import apply_source_update_async, inspect_update_state_async
 
 router = APIRouter(tags=["Admin - System"])
 
@@ -119,6 +120,22 @@ async def overview(request: Request):
         "database": database,
         "metrics_database": http_metrics.storage_health(),
     }
+
+
+@router.get("/update/status")
+async def update_status():
+    """Inspect whether a safe source merge is possible."""
+    return await inspect_update_state_async()
+
+
+@router.post("/update/apply")
+async def update_apply():
+    """Apply upstream changes only when the merge is conflict-free.
+
+    Never force-resets or overwrites local tracked changes. On conflict, writes
+    a markdown report under logs/ and returns status=conflict.
+    """
+    return await apply_source_update_async()
 
 
 __all__ = ["router"]

@@ -133,18 +133,33 @@
     "cache": "キャッシュ管理",
     "languageLabel": "言語",
     "logout": "ログアウト",
-    "versionDialogTitle": "バージョン",
+    "versionDialogTitle": "Online Update",
     "versionCurrent": "現在",
     "versionLatest": "最新",
     "versionPublishedAt": "公開日",
     "versionUpToDate": "すでに最新バージョンです。",
     "versionUpdateAvailable": "新しいバージョンがあります。",
     "versionChecking": "更新を確認しています...",
-    "versionRefresh": "更新を確認",
+    "versionRefresh": "Check now",
     "versionUnavailable": "更新の確認に失敗しました。",
     "versionNotesEmpty": "リリースノートはありません。",
     "versionOpenRelease": "リリースを開く",
-    "versionClose": "閉じる"
+    "versionClose": "閉じる",
+    "versionApply": "Safe update & restart",
+    "versionApplying": "Updating safely...",
+    "versionApplyOk": "Merged upstream safely.",
+    "versionApplyBlockedDirty": "Local uncommitted changes detected. Auto-update refused to avoid overwrite.",
+    "versionApplyConflict": "Merge conflict detected. Aborted. Check the log and ask an agent to help merge.",
+    "versionApplyFailed": "Safe update failed.",
+    "versionApplyUpToDate": "Already up to date. Nothing to merge.",
+    "versionApplyNeedRestart": "Merge succeeded, but auto-restart was not scheduled. Please restart manually.",
+    "versionConflictReport": "Conflict report",
+    "versionInfoSection": "Version info",
+    "versionBuildType": "Build type",
+    "versionNotes": "Release notes",
+    "versionNotesFor": "Notes for {version}",
+    "versionCheckFailed": "Update check failed",
+    "versionApplyRestarting": "Merged safely. Service is restarting to load the new code."
   },
   "account": {
     "pageTitle": "Grok2API - アカウント",
@@ -381,67 +396,204 @@
         }
       },
       "fields": {
-        "appUrl": { "label": "APP ベース URL" },
-        "appKey": { "label": "APP アクセスパスワード" },
-        "apiKey": { "label": "API アクセスキー" },
-        "webuiEnabled": { "label": "WebUI を有効化" },
-        "webuiKey": { "label": "WebUI アクセスパスワード" },
-        "temporary": { "label": "一時セッション" },
-        "memory": { "label": "会話メモリ" },
-        "stream": { "label": "デフォルトのストリーミング" },
-        "thinking": { "label": "デフォルトの推論出力" },
-        "autoChatModeFallback": { "label": "AUTO チャットモードのフォールバック" },
-        "thinkingSummary": { "label": "思考要約出力" },
-        "dynamicStatsig": { "label": "動的 Statsig" },
-        "enableNsfw": { "label": "NSFW 生成を許可" },
-        "showSearchSources": { "label": "コンテンツにソースを追加", "desc": "検索ソースは常に search_sources フィールドに出力されます。このオプションは、テキスト解析クライアントとの互換性のために ## Sources セクションをコンテンツに追加するかどうかを制御します。" },
-        "customInstruction": { "label": "グローバル補助指示" },
-        "imageFormat": { "label": "画像出力形式", "desc": "grok_url と grok_md は既定では Grok CDN のネイティブ URL を直接返します。local_* モードでは、先にサーバーへダウンロードしてからローカルプロキシ経由で再配信します。base64 は埋め込み Data URI を返します。Imagine Public 画像プロキシを有効にすると、WebSocket が返す imagine-public 画像もローカルプロキシ経由になります。" },
-        "imaginePublicImageProxy": { "label": "Imagine Public 画像プロキシ", "desc": "有効にすると、WebSocket が返す imagine-public 画像をサーバーにダウンロードし、ローカルプロキシ経由で配信します。無効の場合、公開画像はそのまま返します。" },
-        "videoFormat": { "label": "動画出力形式" },
-        "refreshEnabled": { "label": "クォータ更新を有効化", "desc": "オンにすると自動的にクォータ更新モードへ切り替わり、オフにすると自動的に自動再試行モードへ切り替わります。", "help": "オン：クォータ更新モード。scheduler が実クォータを定期同期し、スコアでアカウントを選択します。\nオフ：自動再試行モード。upstream を能動的に確認せず、ランダム選択し、エラー時は最大 5 回まで別アカウントへ自動切替します。\n推奨：1 万件以上のアカウントではオフにして、能動確認による upstream 429 を避けてください。" },
-        "maxInflight": { "label": "アカウントごとの同時実行上限", "desc": "1 アカウントで同時に処理中にできるリクエスト数の上限です。上限に達したアカウントは選択時にスキップされます（両モード共通）。" },
-        "basicInterval": { "label": "Basic 周期（秒）", "desc": "Basic プールの共通周期です。quota モードではバックグラウンド更新に、random モードでは 429 クールダウンに使われます。既定値は 86400s です。" },
-        "superInterval": { "label": "Super 周期（秒）", "desc": "Super プールの共通周期です。quota モードではバックグラウンド更新に、random モードでは 429 クールダウンに使われます。既定値は 7200s です。" },
-        "heavyInterval": { "label": "Heavy 周期（秒）", "desc": "Heavy プールの共通周期です。quota モードではバックグラウンド更新に、random モードでは 429 クールダウンに使われます。既定値は 7200s です。" },
-        "usageConcurrency": { "label": "更新並列数", "desc": "クォータ更新中に許可する usage 呼び出しの最大並列数です。" },
-        "onDemandMinInterval": { "label": "オンデマンド更新間隔（秒）", "desc": "429 処理など、リクエスト経路から発生する更新のスロットル間隔です。この間隔内の重複トリガーは 1 回の更新にまとめられます。" },
-        "imageCacheMaxMb": { "label": "画像キャッシュ上限（MB）", "desc": "0 は無制限です。ローカルプロキシで保存されたメディアにのみ適用され、上限を超えると最も古いファイルから削除し、使用量を上限の 60% まで一気に戻します。" },
-        "videoCacheMaxMb": { "label": "動画キャッシュ上限（MB）", "desc": "0 は無制限です。ローカルプロキシで保存されたメディアにのみ適用され、上限を超えると最も古いファイルから削除し、使用量を上限の 60% まで一気に戻します。" },
-        "nsfwConcurrency": { "label": "NSFW 有効化の並列数" },
-        "refreshConcurrency": { "label": "Usage 更新の並列数" },
-        "assetUploadConcurrency": { "label": "Asset アップロード並列数" },
-        "assetListConcurrency": { "label": "Asset 一覧取得並列数" },
-        "assetDeleteConcurrency": { "label": "Asset 削除並列数" },
-        "proxyMode": { "label": "プロキシモード" },
-        "proxyUrl": { "label": "プライマリプロキシ URL" },
-        "resourceProxyUrl": { "label": "リソースプロキシ URL" },
-        "proxyPool": { "label": "プライマリプロキシプール" },
-        "resourceProxyPool": { "label": "リソースプロキシプール" },
-        "skipSslVerify": { "label": "SSL 検証をスキップ" },
-        "clearanceMode": { "label": "Clearance モード" },
-        "browserFingerprint": { "label": "ブラウザフィンガープリント" },
-        "userAgent": { "label": "User-Agent" },
-        "cfCookies": { "label": "Cloudflare Cookies" },
-        "flaresolverrUrl": { "label": "FlareSolverr URL" },
-        "challengeTimeout": { "label": "チャレンジタイムアウト（秒）" },
-        "refreshInterval": { "label": "更新間隔（秒）" },
-        "maxRetries": { "label": "アカウント再試行上限" },
-        "retryCodes": { "label": "再試行対象のステータスコード" },
-        "resetSessionCodes": { "label": "セッション再構築対象のステータスコード" },
-        "chatTimeout": { "label": "チャットリクエストタイムアウト（秒）" },
-        "imageTimeout": { "label": "画像リクエストタイムアウト（秒）" },
-        "videoTimeout": { "label": "動画リクエストタイムアウト（秒）" },
-        "voiceTimeout": { "label": "音声リクエストタイムアウト（秒）" },
-        "nsfwTimeout": { "label": "NSFW 処理タイムアウト（秒）" },
-        "assetUploadTimeout": { "label": "Asset アップロードタイムアウト（秒）" },
-        "assetDownloadTimeout": { "label": "Asset ダウンロードタイムアウト（秒）" },
-        "assetListTimeout": { "label": "Asset 一覧タイムアウト（秒）" },
-        "assetDeleteTimeout": { "label": "Asset 削除タイムアウト（秒）" },
-        "streamTimeout": { "label": "ストリーミング待機タイムアウト（秒）" },
-        "interRoundWait": { "label": "ラウンド間待機時間（秒）" },
-        "fileLogLevel": { "label": "ファイルログレベル", "desc": "ログファイルに書き込む最低レベル。コンソールとは独立して設定できます。デフォルト: INFO。" },
-        "logMaxFiles": { "label": "ログ保持日数", "desc": "日次ローテーション時に保持するログファイルの最大数。デフォルト: 7。" }
+        "appUrl": {
+          "label": "APP ベース URL"
+        },
+        "appKey": {
+          "label": "APP アクセスパスワード"
+        },
+        "apiKey": {
+          "label": "API アクセスキー"
+        },
+        "webuiEnabled": {
+          "label": "WebUI を有効化"
+        },
+        "webuiKey": {
+          "label": "WebUI アクセスパスワード"
+        },
+        "temporary": {
+          "label": "一時セッション"
+        },
+        "memory": {
+          "label": "会話メモリ"
+        },
+        "stream": {
+          "label": "デフォルトのストリーミング"
+        },
+        "thinking": {
+          "label": "デフォルトの推論出力"
+        },
+        "autoChatModeFallback": {
+          "label": "AUTO チャットモードのフォールバック"
+        },
+        "thinkingSummary": {
+          "label": "思考要約出力"
+        },
+        "dynamicStatsig": {
+          "label": "動的 Statsig"
+        },
+        "enableNsfw": {
+          "label": "NSFW 生成を許可"
+        },
+        "showSearchSources": {
+          "label": "コンテンツにソースを追加",
+          "desc": "検索ソースは常に search_sources フィールドに出力されます。このオプションは、テキスト解析クライアントとの互換性のために ## Sources セクションをコンテンツに追加するかどうかを制御します。"
+        },
+        "customInstruction": {
+          "label": "グローバル補助指示"
+        },
+        "imageFormat": {
+          "label": "画像出力形式",
+          "desc": "grok_url と grok_md は既定では Grok CDN のネイティブ URL を直接返します。local_* モードでは、先にサーバーへダウンロードしてからローカルプロキシ経由で再配信します。base64 は埋め込み Data URI を返します。Imagine Public 画像プロキシを有効にすると、WebSocket が返す imagine-public 画像もローカルプロキシ経由になります。"
+        },
+        "imaginePublicImageProxy": {
+          "label": "Imagine Public 画像プロキシ",
+          "desc": "有効にすると、WebSocket が返す imagine-public 画像をサーバーにダウンロードし、ローカルプロキシ経由で配信します。無効の場合、公開画像はそのまま返します。"
+        },
+        "videoFormat": {
+          "label": "動画出力形式"
+        },
+        "refreshEnabled": {
+          "label": "クォータ更新を有効化",
+          "desc": "オンにすると自動的にクォータ更新モードへ切り替わり、オフにすると自動的に自動再試行モードへ切り替わります。",
+          "help": "オン：クォータ更新モード。scheduler が実クォータを定期同期し、スコアでアカウントを選択します。\nオフ：自動再試行モード。upstream を能動的に確認せず、ランダム選択し、エラー時は最大 5 回まで別アカウントへ自動切替します。\n推奨：1 万件以上のアカウントではオフにして、能動確認による upstream 429 を避けてください。"
+        },
+        "maxInflight": {
+          "label": "アカウントごとの同時実行上限",
+          "desc": "1 アカウントで同時に処理中にできるリクエスト数の上限です。上限に達したアカウントは選択時にスキップされます（両モード共通）。"
+        },
+        "basicInterval": {
+          "label": "Basic 周期（秒）",
+          "desc": "Basic プールの共通周期です。quota モードではバックグラウンド更新に、random モードでは 429 クールダウンに使われます。既定値は 86400s です。"
+        },
+        "superInterval": {
+          "label": "Super 周期（秒）",
+          "desc": "Super プールの共通周期です。quota モードではバックグラウンド更新に、random モードでは 429 クールダウンに使われます。既定値は 7200s です。"
+        },
+        "heavyInterval": {
+          "label": "Heavy 周期（秒）",
+          "desc": "Heavy プールの共通周期です。quota モードではバックグラウンド更新に、random モードでは 429 クールダウンに使われます。既定値は 7200s です。"
+        },
+        "usageConcurrency": {
+          "label": "更新並列数",
+          "desc": "クォータ更新中に許可する usage 呼び出しの最大並列数です。"
+        },
+        "onDemandMinInterval": {
+          "label": "オンデマンド更新間隔（秒）",
+          "desc": "429 処理など、リクエスト経路から発生する更新のスロットル間隔です。この間隔内の重複トリガーは 1 回の更新にまとめられます。"
+        },
+        "imageCacheMaxMb": {
+          "label": "画像キャッシュ上限（MB）",
+          "desc": "0 は無制限です。ローカルプロキシで保存されたメディアにのみ適用され、上限を超えると最も古いファイルから削除し、使用量を上限の 60% まで一気に戻します。"
+        },
+        "videoCacheMaxMb": {
+          "label": "動画キャッシュ上限（MB）",
+          "desc": "0 は無制限です。ローカルプロキシで保存されたメディアにのみ適用され、上限を超えると最も古いファイルから削除し、使用量を上限の 60% まで一気に戻します。"
+        },
+        "nsfwConcurrency": {
+          "label": "NSFW 有効化の並列数"
+        },
+        "refreshConcurrency": {
+          "label": "Usage 更新の並列数"
+        },
+        "assetUploadConcurrency": {
+          "label": "Asset アップロード並列数"
+        },
+        "assetListConcurrency": {
+          "label": "Asset 一覧取得並列数"
+        },
+        "assetDeleteConcurrency": {
+          "label": "Asset 削除並列数"
+        },
+        "proxyMode": {
+          "label": "プロキシモード"
+        },
+        "proxyUrl": {
+          "label": "プライマリプロキシ URL"
+        },
+        "resourceProxyUrl": {
+          "label": "リソースプロキシ URL"
+        },
+        "proxyPool": {
+          "label": "プライマリプロキシプール"
+        },
+        "resourceProxyPool": {
+          "label": "リソースプロキシプール"
+        },
+        "skipSslVerify": {
+          "label": "SSL 検証をスキップ"
+        },
+        "clearanceMode": {
+          "label": "Clearance モード"
+        },
+        "browserFingerprint": {
+          "label": "ブラウザフィンガープリント"
+        },
+        "userAgent": {
+          "label": "User-Agent"
+        },
+        "cfCookies": {
+          "label": "Cloudflare Cookies"
+        },
+        "flaresolverrUrl": {
+          "label": "FlareSolverr URL"
+        },
+        "challengeTimeout": {
+          "label": "チャレンジタイムアウト（秒）"
+        },
+        "refreshInterval": {
+          "label": "更新間隔（秒）"
+        },
+        "maxRetries": {
+          "label": "アカウント再試行上限"
+        },
+        "retryCodes": {
+          "label": "再試行対象のステータスコード"
+        },
+        "resetSessionCodes": {
+          "label": "セッション再構築対象のステータスコード"
+        },
+        "chatTimeout": {
+          "label": "チャットリクエストタイムアウト（秒）"
+        },
+        "imageTimeout": {
+          "label": "画像リクエストタイムアウト（秒）"
+        },
+        "videoTimeout": {
+          "label": "動画リクエストタイムアウト（秒）"
+        },
+        "voiceTimeout": {
+          "label": "音声リクエストタイムアウト（秒）"
+        },
+        "nsfwTimeout": {
+          "label": "NSFW 処理タイムアウト（秒）"
+        },
+        "assetUploadTimeout": {
+          "label": "Asset アップロードタイムアウト（秒）"
+        },
+        "assetDownloadTimeout": {
+          "label": "Asset ダウンロードタイムアウト（秒）"
+        },
+        "assetListTimeout": {
+          "label": "Asset 一覧タイムアウト（秒）"
+        },
+        "assetDeleteTimeout": {
+          "label": "Asset 削除タイムアウト（秒）"
+        },
+        "streamTimeout": {
+          "label": "ストリーミング待機タイムアウト（秒）"
+        },
+        "interRoundWait": {
+          "label": "ラウンド間待機時間（秒）"
+        },
+        "fileLogLevel": {
+          "label": "ファイルログレベル",
+          "desc": "ログファイルに書き込む最低レベル。コンソールとは独立して設定できます。デフォルト: INFO。"
+        },
+        "logMaxFiles": {
+          "label": "ログ保持日数",
+          "desc": "日次ローテーション時に保持するログファイルの最大数。デフォルト: 7。"
+        }
       }
     }
   },

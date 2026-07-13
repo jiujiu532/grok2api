@@ -56,3 +56,6 @@ htmlcov/
 
 # Local analysis docs (not for public repo)
 docs/
+
+# Local packaged desktop binaries (rebuildable)
+desktop-app/*.app/

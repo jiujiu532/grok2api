@@ -23,18 +23,33 @@
     "cache": "Cache Management",
     "languageLabel": "Language",
     "logout": "Sign Out",
-    "versionDialogTitle": "Version",
+    "versionDialogTitle": "Online Update",
     "versionCurrent": "Current",
     "versionLatest": "Latest",
     "versionPublishedAt": "Published",
     "versionUpToDate": "You are already on the latest version.",
     "versionUpdateAvailable": "A new version is available.",
     "versionChecking": "Checking for updates...",
-    "versionRefresh": "Check Now",
+    "versionRefresh": "Check now",
     "versionUnavailable": "Failed to check for updates.",
     "versionNotesEmpty": "No release notes available.",
     "versionOpenRelease": "Open Release",
-    "versionClose": "Close"
+    "versionClose": "Close",
+    "versionApply": "Safe update & restart",
+    "versionApplying": "Updating safely...",
+    "versionApplyOk": "Merged upstream safely.",
+    "versionApplyBlockedDirty": "Local uncommitted changes detected. Auto-update refused to avoid overwrite.",
+    "versionApplyConflict": "Merge conflict detected. Aborted. Check the log and ask an agent to help merge.",
+    "versionApplyFailed": "Safe update failed.",
+    "versionApplyUpToDate": "Already up to date. Nothing to merge.",
+    "versionApplyNeedRestart": "Merge succeeded, but auto-restart was not scheduled. Please restart manually.",
+    "versionConflictReport": "Conflict report",
+    "versionInfoSection": "Version info",
+    "versionBuildType": "Build type",
+    "versionNotes": "Release notes",
+    "versionNotesFor": "Notes for {version}",
+    "versionCheckFailed": "Update check failed",
+    "versionApplyRestarting": "Merged safely. Service is restarting to load the new code."
   },
   "dashboard": {
     "pageTitle": "Grok2API - Dashboard",
@@ -438,9 +453,7 @@
       "disabled": "Disabled",
       "expired": "Expired",
       "invalid": "Abnormal"
-    },
-    "autoNsfwOnImport": "Auto-enable NSFW after import",
-    "autoNsfwHint": "Requires additional time to detect account status"
+    }
   },
   "config": {
     "pageTitle": "Grok2API - Configuration Management",

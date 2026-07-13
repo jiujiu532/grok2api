@@ -8,13 +8,6 @@
   <link href="https://cdn.jsdelivr.net/npm/geist@1.0.0/dist/fonts/geist-sans/style.css" rel="stylesheet">
   <link href="/static/css/app.css?v={{APP_VERSION}}" rel="stylesheet">
   <style>
-    body { background:#FAF9F5 }
-    .page-hd {
-      display:flex; align-items:flex-start; justify-content:space-between;
-      gap:16px; margin-bottom:28px;
-    }
-    .page-title { font-size:24px; font-weight:700; line-height:1.2 }
-    .page-sub { margin-top:6px; color:var(--fg-muted); font-size:13px }
     .refresh-btn {
       height:34px; padding:0 14px; border:1px solid #e5e1d9; border-radius:999px;
       display:inline-flex; align-items:center; gap:7px; background:#fff;
@@ -92,14 +85,7 @@
       width:47px; height:47px; fill:none; stroke:currentColor; stroke-width:1.6;
       transform:rotate(-3deg);
     }
-    .section { margin-top:28px }
-    .section-head {
-      display:flex; align-items:center; justify-content:space-between;
-      gap:12px; margin-bottom:12px;
-    }
-    .section-title { font-size:13px; font-weight:650; color:#292621 }
-    .section-note { color:#969087; font-size:11px; font-variant-numeric:tabular-nums }
-    .metric-grid {
+.metric-grid {
       display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:12px;
     }
     .metric-grid.runtime { grid-template-columns:repeat(5,minmax(0,1fr)) }
@@ -123,11 +109,7 @@
       line-height:1; letter-spacing:-.03em; font-variant-numeric:tabular-nums;
     }
     .metric-sub { min-height:14px; color:#a09a91; font-size:11px }
-    .panel {
-      border:1px solid #eee9e1; border-radius:16px; background:#fff;
-      padding:18px; box-shadow:0 1px 2px rgba(31,28,24,.02);
-    }
-    .runtime-meta {
+.runtime-meta {
       display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px;
       margin-bottom:12px;
     }
@@ -206,8 +188,7 @@
       .quota-grid { grid-template-columns:repeat(3,minmax(0,1fr)) }
     }
     @media (max-width:700px) {
-      .page-hd { align-items:stretch }
-      .status-hero { grid-template-columns:1fr; min-height:0; padding:20px }
+.status-hero { grid-template-columns:1fr; min-height:0; padding:20px }
       .status-visual { display:none }
       .metric-grid,.metric-grid.runtime { grid-template-columns:repeat(2,minmax(0,1fr)) }
       .runtime-meta,.pool-grid,.quick-grid { grid-template-columns:1fr }

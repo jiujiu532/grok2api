@@ -133,18 +133,33 @@
     "cache": "Cache-Verwaltung",
     "languageLabel": "Sprache",
     "logout": "Abmelden",
-    "versionDialogTitle": "Version",
+    "versionDialogTitle": "Online Update",
     "versionCurrent": "Aktuell",
     "versionLatest": "Neueste",
     "versionPublishedAt": "Veröffentlicht",
     "versionUpToDate": "Sie verwenden bereits die neueste Version.",
     "versionUpdateAvailable": "Eine neue Version ist verfügbar.",
     "versionChecking": "Suche nach Updates...",
-    "versionRefresh": "Jetzt prüfen",
+    "versionRefresh": "Check now",
     "versionUnavailable": "Update-Prüfung fehlgeschlagen.",
     "versionNotesEmpty": "Keine Versionshinweise verfügbar.",
     "versionOpenRelease": "Release öffnen",
-    "versionClose": "Schließen"
+    "versionClose": "Schließen",
+    "versionApply": "Safe update & restart",
+    "versionApplying": "Updating safely...",
+    "versionApplyOk": "Merged upstream safely.",
+    "versionApplyBlockedDirty": "Local uncommitted changes detected. Auto-update refused to avoid overwrite.",
+    "versionApplyConflict": "Merge conflict detected. Aborted. Check the log and ask an agent to help merge.",
+    "versionApplyFailed": "Safe update failed.",
+    "versionApplyUpToDate": "Already up to date. Nothing to merge.",
+    "versionApplyNeedRestart": "Merge succeeded, but auto-restart was not scheduled. Please restart manually.",
+    "versionConflictReport": "Conflict report",
+    "versionInfoSection": "Version info",
+    "versionBuildType": "Build type",
+    "versionNotes": "Release notes",
+    "versionNotesFor": "Notes for {version}",
+    "versionCheckFailed": "Update check failed",
+    "versionApplyRestarting": "Merged safely. Service is restarting to load the new code."
   },
   "account": {
     "pageTitle": "Grok2API - Konten",
@@ -381,67 +396,204 @@
         }
       },
       "fields": {
-        "appUrl": { "label": "APP-Basis-URL" },
-        "appKey": { "label": "APP-Zugriffspasswort" },
-        "apiKey": { "label": "API-Zugriffsschlüssel" },
-        "webuiEnabled": { "label": "WebUI aktivieren" },
-        "webuiKey": { "label": "WebUI-Zugriffspasswort" },
-        "temporary": { "label": "Temporäre Sitzungen" },
-        "memory": { "label": "Konversationsspeicher" },
-        "stream": { "label": "Standard-Streaming" },
-        "thinking": { "label": "Standard-Ausgabe für Reasoning" },
-        "autoChatModeFallback": { "label": "AUTO-Chatmodus-Fallback" },
-        "thinkingSummary": { "label": "Kompakte Reasoning-Ausgabe" },
-        "dynamicStatsig": { "label": "Dynamisches Statsig" },
-        "enableNsfw": { "label": "NSFW-Erzeugung zulassen" },
-        "showSearchSources": { "label": "Quellen an Inhalt anhängen", "desc": "Suchquellen werden immer im Feld search_sources ausgegeben. Diese Option steuert, ob zusätzlich ein ## Sources-Abschnitt an den Inhalt angehängt wird (für Abwärtskompatibilität mit textbasierten Clients)." },
-        "customInstruction": { "label": "Globale Zusatzanweisung" },
-        "imageFormat": { "label": "Bildausgabeformat", "desc": "grok_url und grok_md geben die native Grok-CDN-Adresse standardmäßig direkt zurück. local_* Modi laden Assets zuerst auf den Server herunter und stellen sie über den lokalen Proxy bereit. base64 gibt eine eingebettete Data URI zurück. Wenn der Imagine-Public-Bildproxy aktiviert ist, werden vom WebSocket zurückgegebene imagine-public-Bilder ebenfalls lokal proxied." },
-        "imaginePublicImageProxy": { "label": "Imagine-Public-Bildproxy", "desc": "Wenn aktiviert, werden vom WebSocket zurückgegebene imagine-public-Bilder auf den Server heruntergeladen und über den lokalen Proxy ausgeliefert. Wenn deaktiviert, werden öffentliche Bilder direkt zurückgegeben." },
-        "videoFormat": { "label": "Videoausgabeformat" },
-        "refreshEnabled": { "label": "Quotenaktualisierung aktivieren", "desc": "Wenn aktiviert, wechselt das System automatisch in den Quotenaktualisierungsmodus. Wenn deaktiviert, wechselt es automatisch in den Auto-Retry-Modus.", "help": "Ein: Quotenaktualisierung. Der Scheduler synchronisiert regelmäßig echte Quoten, die Auswahl erfolgt nach Bewertung.\nAus: Auto-Retry-Modus. Keine aktive upstream-Abfrage, zufällige Auswahl und automatischer Kontowechsel bei Fehlern mit bis zu 5 Wiederholungen.\nEmpfehlung: Bei mehr als 10.000 Konten ausschalten, um upstream 429 durch aktive Abfragen zu vermeiden." },
-        "maxInflight": { "label": "Max. laufende Anfragen pro Konto", "desc": "Maximale Anzahl gleichzeitig laufender Anfragen pro Konto. Konten am Limit werden von der Auswahl übersprungen (für beide Modi gemeinsam)." },
-        "basicInterval": { "label": "Basic-Zyklus (s)", "desc": "Gemeinsamer Zyklus für den Basic-Pool: wird im Quota-Modus für den Hintergrund-Refresh und im Random-Modus für die 429-Abkühlung verwendet. Standardwert: 86400s." },
-        "superInterval": { "label": "Super-Zyklus (s)", "desc": "Gemeinsamer Zyklus für den Super-Pool: wird im Quota-Modus für den Hintergrund-Refresh und im Random-Modus für die 429-Abkühlung verwendet. Standardwert: 7200s." },
-        "heavyInterval": { "label": "Heavy-Zyklus (s)", "desc": "Gemeinsamer Zyklus für den Heavy-Pool: wird im Quota-Modus für den Hintergrund-Refresh und im Random-Modus für die 429-Abkühlung verwendet. Standardwert: 7200s." },
-        "usageConcurrency": { "label": "Aktualisierungs-Konkurrenz", "desc": "Maximale Anzahl paralleler usage-Aufrufe während der Quotenaktualisierung." },
-        "onDemandMinInterval": { "label": "On-Demand-Aktualisierungsintervall (s)", "desc": "Drosselungsfenster für durch Requests ausgelöste Aktualisierungen, z. B. nach 429. Wiederholte Auslöser innerhalb des Intervalls werden zu einer Aktualisierung zusammengefasst." },
-        "imageCacheMaxMb": { "label": "Bild-Cache-Limit (MB)", "desc": "0 deaktiviert das Limit. Gilt nur für lokal per Proxy gespeicherte Mediendateien. Wird das Limit überschritten, werden zuerst die ältesten Dateien entfernt, bis die Nutzung wieder auf 60% des Limits fällt." },
-        "videoCacheMaxMb": { "label": "Video-Cache-Limit (MB)", "desc": "0 deaktiviert das Limit. Gilt nur für lokal per Proxy gespeicherte Mediendateien. Wird das Limit überschritten, werden zuerst die ältesten Dateien entfernt, bis die Nutzung wieder auf 60% des Limits fällt." },
-        "nsfwConcurrency": { "label": "Konkurrenz für NSFW-Aktivierung" },
-        "refreshConcurrency": { "label": "Usage-Aktualisierungskonkurrenz" },
-        "assetUploadConcurrency": { "label": "Asset-Upload-Konkurrenz" },
-        "assetListConcurrency": { "label": "Asset-Listen-Konkurrenz" },
-        "assetDeleteConcurrency": { "label": "Asset-Lösch-Konkurrenz" },
-        "proxyMode": { "label": "Proxy-Modus" },
-        "proxyUrl": { "label": "Primäre Proxy-URL" },
-        "resourceProxyUrl": { "label": "Ressourcen-Proxy-URL" },
-        "proxyPool": { "label": "Primärer Proxy-Pool" },
-        "resourceProxyPool": { "label": "Ressourcen-Proxy-Pool" },
-        "skipSslVerify": { "label": "SSL-Prüfung überspringen" },
-        "clearanceMode": { "label": "Clearance-Modus" },
-        "browserFingerprint": { "label": "Browser-Fingerprint" },
-        "userAgent": { "label": "User-Agent" },
-        "cfCookies": { "label": "Cloudflare-Cookies" },
-        "flaresolverrUrl": { "label": "FlareSolverr-URL" },
-        "challengeTimeout": { "label": "Challenge-Timeout (s)" },
-        "refreshInterval": { "label": "Aktualisierungsintervall (s)" },
-        "maxRetries": { "label": "Konto-Wiederholungslimit" },
-        "retryCodes": { "label": "Retry-Statuscodes" },
-        "resetSessionCodes": { "label": "Statuscodes für Sitzungsreset" },
-        "chatTimeout": { "label": "Chat-Timeout (s)" },
-        "imageTimeout": { "label": "Bild-Timeout (s)" },
-        "videoTimeout": { "label": "Video-Timeout (s)" },
-        "voiceTimeout": { "label": "Sprach-Timeout (s)" },
-        "nsfwTimeout": { "label": "NSFW-Timeout (s)" },
-        "assetUploadTimeout": { "label": "Asset-Upload-Timeout (s)" },
-        "assetDownloadTimeout": { "label": "Asset-Download-Timeout (s)" },
-        "assetListTimeout": { "label": "Asset-Listen-Timeout (s)" },
-        "assetDeleteTimeout": { "label": "Asset-Lösch-Timeout (s)" },
-        "streamTimeout": { "label": "Streaming-Leerlauf-Timeout (s)" },
-        "interRoundWait": { "label": "Wartezeit zwischen Runden (s)" },
-        "fileLogLevel": { "label": "Datei-Protokollebene", "desc": "Mindeststufe für Protokolldateien, unabhängig von der Konsole konfigurierbar. Standard: INFO." },
-        "logMaxFiles": { "label": "Protokoll-Aufbewahrung (Tage)", "desc": "Maximale Anzahl täglicher Protokolldateien bei der Rotation. Standard: 7." }
+        "appUrl": {
+          "label": "APP-Basis-URL"
+        },
+        "appKey": {
+          "label": "APP-Zugriffspasswort"
+        },
+        "apiKey": {
+          "label": "API-Zugriffsschlüssel"
+        },
+        "webuiEnabled": {
+          "label": "WebUI aktivieren"
+        },
+        "webuiKey": {
+          "label": "WebUI-Zugriffspasswort"
+        },
+        "temporary": {
+          "label": "Temporäre Sitzungen"
+        },
+        "memory": {
+          "label": "Konversationsspeicher"
+        },
+        "stream": {
+          "label": "Standard-Streaming"
+        },
+        "thinking": {
+          "label": "Standard-Ausgabe für Reasoning"
+        },
+        "autoChatModeFallback": {
+          "label": "AUTO-Chatmodus-Fallback"
+        },
+        "thinkingSummary": {
+          "label": "Kompakte Reasoning-Ausgabe"
+        },
+        "dynamicStatsig": {
+          "label": "Dynamisches Statsig"
+        },
+        "enableNsfw": {
+          "label": "NSFW-Erzeugung zulassen"
+        },
+        "showSearchSources": {
+          "label": "Quellen an Inhalt anhängen",
+          "desc": "Suchquellen werden immer im Feld search_sources ausgegeben. Diese Option steuert, ob zusätzlich ein ## Sources-Abschnitt an den Inhalt angehängt wird (für Abwärtskompatibilität mit textbasierten Clients)."
+        },
+        "customInstruction": {
+          "label": "Globale Zusatzanweisung"
+        },
+        "imageFormat": {
+          "label": "Bildausgabeformat",
+          "desc": "grok_url und grok_md geben die native Grok-CDN-Adresse standardmäßig direkt zurück. local_* Modi laden Assets zuerst auf den Server herunter und stellen sie über den lokalen Proxy bereit. base64 gibt eine eingebettete Data URI zurück. Wenn der Imagine-Public-Bildproxy aktiviert ist, werden vom WebSocket zurückgegebene imagine-public-Bilder ebenfalls lokal proxied."
+        },
+        "imaginePublicImageProxy": {
+          "label": "Imagine-Public-Bildproxy",
+          "desc": "Wenn aktiviert, werden vom WebSocket zurückgegebene imagine-public-Bilder auf den Server heruntergeladen und über den lokalen Proxy ausgeliefert. Wenn deaktiviert, werden öffentliche Bilder direkt zurückgegeben."
+        },
+        "videoFormat": {
+          "label": "Videoausgabeformat"
+        },
+        "refreshEnabled": {
+          "label": "Quotenaktualisierung aktivieren",
+          "desc": "Wenn aktiviert, wechselt das System automatisch in den Quotenaktualisierungsmodus. Wenn deaktiviert, wechselt es automatisch in den Auto-Retry-Modus.",
+          "help": "Ein: Quotenaktualisierung. Der Scheduler synchronisiert regelmäßig echte Quoten, die Auswahl erfolgt nach Bewertung.\nAus: Auto-Retry-Modus. Keine aktive upstream-Abfrage, zufällige Auswahl und automatischer Kontowechsel bei Fehlern mit bis zu 5 Wiederholungen.\nEmpfehlung: Bei mehr als 10.000 Konten ausschalten, um upstream 429 durch aktive Abfragen zu vermeiden."
+        },
+        "maxInflight": {
+          "label": "Max. laufende Anfragen pro Konto",
+          "desc": "Maximale Anzahl gleichzeitig laufender Anfragen pro Konto. Konten am Limit werden von der Auswahl übersprungen (für beide Modi gemeinsam)."
+        },
+        "basicInterval": {
+          "label": "Basic-Zyklus (s)",
+          "desc": "Gemeinsamer Zyklus für den Basic-Pool: wird im Quota-Modus für den Hintergrund-Refresh und im Random-Modus für die 429-Abkühlung verwendet. Standardwert: 86400s."
+        },
+        "superInterval": {
+          "label": "Super-Zyklus (s)",
+          "desc": "Gemeinsamer Zyklus für den Super-Pool: wird im Quota-Modus für den Hintergrund-Refresh und im Random-Modus für die 429-Abkühlung verwendet. Standardwert: 7200s."
+        },
+        "heavyInterval": {
+          "label": "Heavy-Zyklus (s)",
+          "desc": "Gemeinsamer Zyklus für den Heavy-Pool: wird im Quota-Modus für den Hintergrund-Refresh und im Random-Modus für die 429-Abkühlung verwendet. Standardwert: 7200s."
+        },
+        "usageConcurrency": {
+          "label": "Aktualisierungs-Konkurrenz",
+          "desc": "Maximale Anzahl paralleler usage-Aufrufe während der Quotenaktualisierung."
+        },
+        "onDemandMinInterval": {
+          "label": "On-Demand-Aktualisierungsintervall (s)",
+          "desc": "Drosselungsfenster für durch Requests ausgelöste Aktualisierungen, z. B. nach 429. Wiederholte Auslöser innerhalb des Intervalls werden zu einer Aktualisierung zusammengefasst."
+        },
+        "imageCacheMaxMb": {
+          "label": "Bild-Cache-Limit (MB)",
+          "desc": "0 deaktiviert das Limit. Gilt nur für lokal per Proxy gespeicherte Mediendateien. Wird das Limit überschritten, werden zuerst die ältesten Dateien entfernt, bis die Nutzung wieder auf 60% des Limits fällt."
+        },
+        "videoCacheMaxMb": {
+          "label": "Video-Cache-Limit (MB)",
+          "desc": "0 deaktiviert das Limit. Gilt nur für lokal per Proxy gespeicherte Mediendateien. Wird das Limit überschritten, werden zuerst die ältesten Dateien entfernt, bis die Nutzung wieder auf 60% des Limits fällt."
+        },
+        "nsfwConcurrency": {
+          "label": "Konkurrenz für NSFW-Aktivierung"
+        },
+        "refreshConcurrency": {
+          "label": "Usage-Aktualisierungskonkurrenz"
+        },
+        "assetUploadConcurrency": {
+          "label": "Asset-Upload-Konkurrenz"
+        },
+        "assetListConcurrency": {
+          "label": "Asset-Listen-Konkurrenz"
+        },
+        "assetDeleteConcurrency": {
+          "label": "Asset-Lösch-Konkurrenz"
+        },
+        "proxyMode": {
+          "label": "Proxy-Modus"
+        },
+        "proxyUrl": {
+          "label": "Primäre Proxy-URL"
+        },
+        "resourceProxyUrl": {
+          "label": "Ressourcen-Proxy-URL"
+        },
+        "proxyPool": {
+          "label": "Primärer Proxy-Pool"
+        },
+        "resourceProxyPool": {
+          "label": "Ressourcen-Proxy-Pool"
+        },
+        "skipSslVerify": {
+          "label": "SSL-Prüfung überspringen"
+        },
+        "clearanceMode": {
+          "label": "Clearance-Modus"
+        },
+        "browserFingerprint": {
+          "label": "Browser-Fingerprint"
+        },
+        "userAgent": {
+          "label": "User-Agent"
+        },
+        "cfCookies": {
+          "label": "Cloudflare-Cookies"
+        },
+        "flaresolverrUrl": {
+          "label": "FlareSolverr-URL"
+        },
+        "challengeTimeout": {
+          "label": "Challenge-Timeout (s)"
+        },
+        "refreshInterval": {
+          "label": "Aktualisierungsintervall (s)"
+        },
+        "maxRetries": {
+          "label": "Konto-Wiederholungslimit"
+        },
+        "retryCodes": {
+          "label": "Retry-Statuscodes"
+        },
+        "resetSessionCodes": {
+          "label": "Statuscodes für Sitzungsreset"
+        },
+        "chatTimeout": {
+          "label": "Chat-Timeout (s)"
+        },
+        "imageTimeout": {
+          "label": "Bild-Timeout (s)"
+        },
+        "videoTimeout": {
+          "label": "Video-Timeout (s)"
+        },
+        "voiceTimeout": {
+          "label": "Sprach-Timeout (s)"
+        },
+        "nsfwTimeout": {
+          "label": "NSFW-Timeout (s)"
+        },
+        "assetUploadTimeout": {
+          "label": "Asset-Upload-Timeout (s)"
+        },
+        "assetDownloadTimeout": {
+          "label": "Asset-Download-Timeout (s)"
+        },
+        "assetListTimeout": {
+          "label": "Asset-Listen-Timeout (s)"
+        },
+        "assetDeleteTimeout": {
+          "label": "Asset-Lösch-Timeout (s)"
+        },
+        "streamTimeout": {
+          "label": "Streaming-Leerlauf-Timeout (s)"
+        },
+        "interRoundWait": {
+          "label": "Wartezeit zwischen Runden (s)"
+        },
+        "fileLogLevel": {
+          "label": "Datei-Protokollebene",
+          "desc": "Mindeststufe für Protokolldateien, unabhängig von der Konsole konfigurierbar. Standard: INFO."
+        },
+        "logMaxFiles": {
+          "label": "Protokoll-Aufbewahrung (Tage)",
+          "desc": "Maximale Anzahl täglicher Protokolldateien bei der Rotation. Standard: 7."
+        }
       }
     }
   },

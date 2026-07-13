@@ -10,12 +10,16 @@ window.renderAdminHeader = async function renderAdminHeader() {
       return 'v1';
     }
   })();
-  const HEADER_HTML_CACHE_KEY = `grok2api.admin_header_html.${scriptVersion}`;
+  // headerCacheRev: bump when header.html markup changes so sessionStorage cannot stick to dead nodes like #hd-version-tag
+  const headerCacheRev = '20260713b';
+  const HEADER_HTML_CACHE_KEY = `grok2api.admin_header_html.${scriptVersion}.${headerCacheRev}`;
   const META_VERSION_CACHE_KEY = `grok2api.meta_version.${scriptVersion}`;
   let appVersion = '';
   let updateInfo = null;
   let updateStatus = 'idle';
   let updatePromise = null;
+  let applyStatus = 'idle'; // idle|loading|ok|error
+  let applyResult = null;
 
   const readSessionCache = (key) => {
     try {
@@ -372,32 +376,53 @@ window.renderAdminHeader = async function renderAdminHeader() {
     overlay = document.createElement('div');
     overlay.id = 'admin-version-modal';
     overlay.className = 'modal-overlay';
-    overlay.innerHTML = `
+        overlay.innerHTML = `
       <div class="modal admin-version-modal" role="dialog" aria-modal="true" aria-labelledby="admin-version-modal-title">
         <div class="admin-version-modal-head">
           <div class="modal-title" id="admin-version-modal-title"></div>
-          <div class="admin-version-modal-badge" id="admin-version-modal-badge" hidden></div>
+          <button type="button" class="admin-version-modal-close-x" id="admin-version-modal-close" aria-label="Close">✕</button>
         </div>
-        <div class="admin-version-modal-meta">
-          <div class="admin-version-modal-status" id="admin-version-modal-status"></div>
-          <div class="admin-version-modal-row">
-            <span class="admin-version-modal-label" id="admin-version-modal-current-label"></span>
-            <span class="admin-version-modal-value" id="admin-version-modal-current"></span>
-          </div>
-          <div class="admin-version-modal-row">
-            <span class="admin-version-modal-label" id="admin-version-modal-latest-label"></span>
-            <span class="admin-version-modal-value" id="admin-version-modal-latest"></span>
-          </div>
-          <div class="admin-version-modal-row">
-            <span class="admin-version-modal-label" id="admin-version-modal-published-label"></span>
-            <span class="admin-version-modal-value" id="admin-version-modal-published"></span>
-          </div>
+        <div class="admin-version-modal-body">
+          <section class="admin-version-card">
+            <div class="admin-version-card-hd">
+              <div class="admin-version-card-title" id="admin-version-card-title">版本信息</div>
+              <button id="admin-version-modal-refresh" type="button" class="btn btn-ghost btn-sm"></button>
+            </div>
+            <div class="admin-version-grid">
+              <div class="admin-version-kv">
+                <div class="admin-version-k" id="admin-version-modal-current-label"></div>
+                <div class="admin-version-v" id="admin-version-modal-current"></div>
+              </div>
+              <div class="admin-version-kv">
+                <div class="admin-version-k" id="admin-version-modal-latest-label"></div>
+                <div class="admin-version-v" id="admin-version-modal-latest"></div>
+              </div>
+              <div class="admin-version-kv">
+                <div class="admin-version-k" id="admin-version-modal-build-label">构建类型</div>
+                <div class="admin-version-v" id="admin-version-modal-build">source / git</div>
+              </div>
+              <div class="admin-version-kv">
+                <div class="admin-version-k" id="admin-version-modal-published-label"></div>
+                <div class="admin-version-v" id="admin-version-modal-published"></div>
+              </div>
+            </div>
+            <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+              <div class="admin-version-modal-badge" id="admin-version-modal-badge" hidden></div>
+              <a id="admin-version-modal-link" class="btn btn-ghost btn-sm admin-version-modal-link" href="#" target="_blank" rel="noopener" hidden></a>
+            </div>
+            <div class="admin-version-modal-status is-hidden" id="admin-version-modal-status" style="margin-top:10px"></div>
+          </section>
+          <section class="admin-version-notes-wrap">
+            <button type="button" class="admin-version-notes-toggle" id="admin-version-notes-toggle">
+              <span id="admin-version-notes-toggle-text">更新内容</span>
+              <span aria-hidden="true">▾</span>
+            </button>
+            <div class="admin-version-modal-notes" id="admin-version-modal-notes"></div>
+          </section>
         </div>
-        <div class="admin-version-modal-notes" id="admin-version-modal-notes"></div>
-        <div class="modal-footer">
-          <button id="admin-version-modal-refresh" type="button" class="btn btn-ghost"></button>
-          <a id="admin-version-modal-link" class="btn btn-ghost admin-version-modal-link" href="#" target="_blank" rel="noopener"></a>
-          <button id="admin-version-modal-close" type="button" class="btn btn-primary"></button>
+        <div class="admin-version-modal-apply-msg" id="admin-version-modal-apply-msg" hidden></div>
+        <div class="admin-version-modal-footer modal-footer">
+          <button id="admin-version-modal-apply" type="button" class="btn btn-primary" hidden></button>
         </div>
       </div>
     `;
@@ -415,6 +440,10 @@ window.renderAdminHeader = async function renderAdminHeader() {
     overlay.querySelector('#admin-version-modal-close')?.addEventListener('click', close);
     document.addEventListener('keydown', (event) => {
       if (event.key === 'Escape' && overlay.classList.contains('open')) close();
+    });
+    overlay.querySelector('#admin-version-notes-toggle')?.addEventListener('click', () => {
+      const notes = overlay.querySelector('#admin-version-modal-notes');
+      notes?.classList.toggle('is-collapsed');
     });
 
     return overlay;
@@ -440,11 +469,11 @@ window.renderAdminHeader = async function renderAdminHeader() {
     const releaseNotes = String(updateInfo?.release_notes || '').trim();
 
     if (title) title.textContent = text('header.versionDialogTitle', 'Version');
-    if (currentLabel) currentLabel.textContent = `${text('header.versionCurrent', 'Current')}:`;
-    if (currentValue) currentValue.textContent = currentVersion ? `v${currentVersion}` : '-';
-    if (latestLabel) latestLabel.textContent = `${text('header.versionLatest', 'Latest')}:`;
-    if (latestValue) latestValue.textContent = latestVersion ? `v${latestVersion}` : '-';
-    if (publishedLabel) publishedLabel.textContent = `${text('header.versionPublishedAt', 'Published')}:`;
+    if (currentLabel) currentLabel.textContent = text('header.versionCurrent', 'Current');
+    if (currentValue) currentValue.textContent = currentVersion ? `v${currentVersion.replace(/^v/i,'')}` : '-';
+    if (latestLabel) latestLabel.textContent = text('header.versionLatest', 'Latest');
+    if (latestValue) latestValue.textContent = latestVersion ? `v${latestVersion.replace(/^v/i,'')}` : '-';
+    if (publishedLabel) publishedLabel.textContent = text('header.versionPublishedAt', 'Published');
     if (publishedValue) publishedValue.textContent = formatDateTime(updateInfo?.published_at);
 
     if (badge) {
@@ -458,20 +487,48 @@ window.renderAdminHeader = async function renderAdminHeader() {
       status.className = 'admin-version-modal-status is-hidden';
     }
 
+    const cardTitle = overlay.querySelector('#admin-version-card-title');
+    if (cardTitle) cardTitle.textContent = text('header.versionInfoSection', '版本信息');
+    const buildLabel = overlay.querySelector('#admin-version-modal-build-label');
+    if (buildLabel) buildLabel.textContent = text('header.versionBuildType', '构建类型');
+    const notesToggleText = overlay.querySelector('#admin-version-notes-toggle-text');
+    if (notesToggleText) {
+      const ver = latestVersion ? `v${latestVersion.replace(/^v/i,'')}` : '';
+      notesToggleText.textContent = ver
+        ? text('header.versionNotesFor', '查看 {version} 更新内容', { version: ver })
+        : text('header.versionNotes', '更新内容');
+    }
+
+    if (status) {
+      status.textContent = '';
+      status.className = 'admin-version-modal-status is-hidden';
+    }
     if (badge) {
-      if (updateStatus === 'loading') {
+      badge.hidden = true;
+      badge.textContent = '';
+      badge.className = 'admin-version-modal-badge';
+    }
+    if (updateStatus === 'loading') {
+      if (badge) {
         badge.hidden = false;
         badge.textContent = text('header.versionChecking', 'Checking for updates...');
         badge.className = 'admin-version-modal-badge is-muted';
-      } else if (updateStatus === 'error' || !updateInfo || updateInfo.status === 'error') {
-        badge.hidden = false;
-        badge.textContent = text('header.versionUnavailable', 'Unable to check for updates right now.');
-        badge.className = 'admin-version-modal-badge is-muted';
-      } else if (updateInfo.update_available) {
+      }
+    } else if (updateStatus === 'error' || !updateInfo || updateInfo.status === 'error') {
+      if (status) {
+        const err = String(updateInfo?.error || text('header.versionUnavailable', 'Unable to check for updates right now.'));
+        status.hidden = false;
+        status.textContent = `${text('header.versionCheckFailed', '检查更新失败')}：${err}`;
+        status.className = 'admin-version-modal-status is-error';
+      }
+    } else if (updateInfo.update_available) {
+      if (badge) {
         badge.hidden = false;
         badge.textContent = text('header.versionUpdateAvailable', 'A new version is available.');
         badge.className = 'admin-version-modal-badge is-update';
-      } else {
+      }
+    } else {
+      if (badge) {
         badge.hidden = false;
         badge.textContent = text('header.versionUpToDate', 'You are already on the latest version.');
         badge.className = 'admin-version-modal-badge is-current';
@@ -479,9 +536,12 @@ window.renderAdminHeader = async function renderAdminHeader() {
     }
 
     if (notes) {
-      if (updateStatus === 'loading' || updateStatus === 'error' || !updateInfo || updateInfo.status === 'error') {
-        notes.hidden = true;
-        notes.innerHTML = '';
+      if (updateStatus === 'loading') {
+        notes.hidden = false;
+        notes.innerHTML = `<p>${text('header.versionChecking', 'Checking for updates...')}</p>`;
+      } else if (updateStatus === 'error' || !updateInfo || updateInfo.status === 'error') {
+        notes.hidden = false;
+        notes.innerHTML = `<p>${text('header.versionNotesEmpty', 'No release notes available.')}</p>`;
       } else {
         notes.hidden = false;
         notes.innerHTML = renderReleaseNotes(releaseNotes);
@@ -504,23 +564,172 @@ window.renderAdminHeader = async function renderAdminHeader() {
 
     if (refresh instanceof HTMLButtonElement) {
       refresh.textContent = text('header.versionRefresh', 'Check Now');
-      refresh.disabled = updateStatus === 'loading';
+      refresh.disabled = updateStatus === 'loading' || applyStatus === 'loading';
+    }
+
+    const apply = overlay.querySelector('#admin-version-modal-apply');
+    const applyMsg = overlay.querySelector('#admin-version-modal-apply-msg');
+    const canOfferApply = updateStatus === 'ready'
+      && updateInfo
+      && updateInfo.status !== 'error'
+      && Boolean(updateInfo.update_available);
+    if (apply instanceof HTMLButtonElement) {
+      apply.hidden = !canOfferApply && applyStatus === 'idle';
+      apply.textContent = applyStatus === 'loading'
+        ? text('header.versionApplying', 'Updating safely...')
+        : text('header.versionApply', 'Safe Update');
+      apply.disabled = applyStatus === 'loading' || updateStatus === 'loading' || !canOfferApply;
+      // keep visible after an attempt so user can re-read result context
+      if (applyStatus !== 'idle') apply.hidden = false;
+    }
+    if (applyMsg instanceof HTMLElement) {
+      let message = '';
+      let kind = 'muted';
+      if (applyStatus === 'loading') {
+        message = text('header.versionApplying', 'Updating safely...');
+      } else if (applyResult) {
+        const reason = String(applyResult.reason || '');
+        if (applyResult.applied) {
+          if (applyResult.restart_scheduled) {
+            message = text('header.versionApplyRestarting', 'Merged safely. Service is restarting to load the new code.');
+          } else if (applyResult.needs_restart) {
+            message = text('header.versionApplyNeedRestart', 'Merge succeeded. Restart the service to fully apply it.');
+          } else {
+            message = text('header.versionApplyOk', 'Merged upstream safely.');
+          }
+          kind = 'ok';
+        } else if (reason === 'already_up_to_date') {
+          message = text('header.versionApplyUpToDate', 'Already up to date. Nothing to merge.');
+          kind = 'ok';
+        } else if (reason === 'dirty_worktree') {
+          message = text('header.versionApplyBlockedDirty', 'Local uncommitted changes detected. Auto-update refused to avoid overwrite.');
+          kind = 'error';
+        } else if (reason === 'merge_conflict' || reason === 'merge_failed' || applyResult.status === 'conflict') {
+          const files = Array.isArray(applyResult.conflict_files) ? applyResult.conflict_files : [];
+          const report = applyResult.conflict_report || applyResult.log_path || '';
+          message = text('header.versionApplyConflict', 'Merge conflict detected. Aborted. Check the log and ask an agent to help merge.');
+          if (files.length) message += ` (${files.slice(0, 8).join(', ')}${files.length > 8 ? '…' : ''})`;
+          if (report) message += ` | ${text('header.versionConflictReport', 'Conflict report')}: ${report}`;
+          kind = 'error';
+        } else {
+          message = applyResult.message || text('header.versionApplyFailed', 'Safe update failed.');
+          if (applyResult.log_path) message += ` | log: ${applyResult.log_path}`;
+          kind = 'error';
+        }
+      }
+      if (message) {
+        applyMsg.hidden = false;
+        applyMsg.dataset.kind = kind;
+        applyMsg.textContent = message;
+      } else {
+        applyMsg.hidden = true;
+        applyMsg.textContent = '';
+        delete applyMsg.dataset.kind;
+      }
     }
 
     if (close instanceof HTMLButtonElement) {
       close.textContent = text('header.versionClose', 'Close');
+      close.disabled = applyStatus === 'loading';
     }
 
     overlay.classList.add('open');
     overlay.setAttribute('aria-hidden', 'false');
   };
 
+
+  const applyUpdate = async () => {
+    if (applyStatus === 'loading') return;
+    applyStatus = 'loading';
+    applyResult = null;
+    const overlay = ensureVersionModal();
+    renderVersionModal(overlay);
+    try {
+      const key = await adminKey.get();
+      const response = await fetch(`${ADMIN_API}/update/apply`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${key || ''}`,
+          Accept: 'application/json',
+        },
+        cache: 'no-store',
+      });
+      if (response.status === 401 || response.status === 403) {
+        adminLogout();
+        return;
+      }
+      const data = await response.json().catch(() => ({}));
+      applyResult = data && typeof data === 'object' ? data : { status: 'error', message: 'invalid response' };
+      if (!response.ok && !applyResult.status) {
+        applyResult = { status: 'error', message: `HTTP ${response.status}` };
+      }
+      applyStatus = applyResult.status === 'ok' && (applyResult.applied || applyResult.reason === 'already_up_to_date')
+        ? 'ok'
+        : (applyResult.status === 'conflict' || applyResult.status === 'blocked' || applyResult.status === 'error')
+          ? 'error'
+          : (applyResult.applied ? 'ok' : 'error');
+      if (applyResult.applied) {
+        // 合并成功后服务可能即将重启；先更新文案，再等待健康检查恢复
+        if (applyResult.restart_scheduled) {
+          const waitRestart = async () => {
+            const started = Date.now();
+            // 给后端一点时间挂掉再起来
+            await new Promise((r) => setTimeout(r, 1500));
+            while (Date.now() - started < 45000) {
+              try {
+                const metaRes = await fetch('/meta', { cache: 'no-store' });
+                if (metaRes.ok) {
+                  const meta = await metaRes.json();
+                  appVersion = String(meta?.version || appVersion || '').trim();
+                  window.__grok2apiMetaVersion = appVersion;
+                  await refreshUpdate(true);
+                  return;
+                }
+              } catch {}
+              await new Promise((r) => setTimeout(r, 1000));
+            }
+          };
+          waitRestart().finally(() => {
+            applyVersion();
+            const ov = ensureVersionModal();
+            if (ov.classList.contains('open')) renderVersionModal(ov);
+          });
+        } else {
+          try {
+            const metaRes = await fetch('/meta', { cache: 'no-store' });
+            if (metaRes.ok) {
+              const meta = await metaRes.json();
+              appVersion = String(meta?.version || appVersion || '').trim();
+              window.__grok2apiMetaVersion = appVersion;
+            }
+          } catch {}
+          await refreshUpdate(true);
+        }
+      }
+    } catch (error) {
+      applyStatus = 'error';
+      applyResult = {
+        status: 'error',
+        reason: 'request_failed',
+        message: error?.message || String(error),
+      };
+    } finally {
+      applyVersion();
+      if (overlay.classList.contains('open')) {
+        renderVersionModal(overlay);
+      }
+    }
+  };
+
   const openVersionModal = async () => {
     const overlay = ensureVersionModal();
+    applyStatus = 'idle';
+    applyResult = null;
     updateStatus = 'loading';
     renderVersionModal(overlay);
     try {
-      await refreshUpdate(false);
+      // 每次点开版本都强制检查一次，参考「立即检查」体验
+      await refreshUpdate(true);
     } finally {
       applyVersion();
       if (overlay.classList.contains('open')) {
@@ -530,34 +739,50 @@ window.renderAdminHeader = async function renderAdminHeader() {
   };
 
   const applyVersion = () => {
-    // 版本信息入口已禁用
     const node = mount.querySelector('#hd-version');
-    node?.remove();
+    if (!(node instanceof HTMLElement)) return;
+    const label = appVersion ? `v${appVersion.replace(/^v/i, '')}` : '—';
+    node.textContent = label;
+    node.title = appVersion ? `Grok2API ${label}` : 'Version';
+    node.setAttribute('aria-label', node.title);
+    node.classList.toggle('has-update', Boolean(updateInfo?.update_available));
   };
 
   await loadVersion();
 
+  const headerLooksValid = (html) => typeof html === 'string'
+    && html.includes('id="hd-version"')
+    && !html.includes('id="hd-version-tag"')
+    && !html.includes('v0.2.2');
+
   try {
-    const cachedHtml = window.__grok2apiAdminHeaderHtml || readSessionCache(HEADER_HTML_CACHE_KEY);
-    if (cachedHtml) {
-      mount.innerHTML = cachedHtml;
-    } else {
-      const res = await fetch('/static/admin/header.html');
+    let html = '';
+    const memoryHtml = window.__grok2apiAdminHeaderHtml || '';
+    const cachedHtml = readSessionCache(HEADER_HTML_CACHE_KEY);
+    if (headerLooksValid(memoryHtml)) html = memoryHtml;
+    else if (headerLooksValid(cachedHtml)) html = cachedHtml;
+
+    if (!html) {
+      const res = await fetch(`/static/admin/header.html?v=${encodeURIComponent(scriptVersion)}&r=${headerCacheRev}`, { cache: 'no-store' });
       if (!res.ok) throw new Error('header unavailable');
-      const html = await res.text();
-      mount.innerHTML = html;
-      window.__grok2apiAdminHeaderHtml = html;
-      writeSessionCache(HEADER_HTML_CACHE_KEY, html);
+      html = await res.text();
     }
+
+    if (!headerLooksValid(html)) throw new Error('header markup outdated');
+    mount.innerHTML = html;
+    window.__grok2apiAdminHeaderHtml = html;
+    writeSessionCache(HEADER_HTML_CACHE_KEY, html);
   } catch {
     mount.innerHTML = `
       <header class="admin-header">
         <div class="admin-header-inner">
           <div class="admin-brand-wrap">
-            <a href="https://github.com/chenyme/grok2api" target="_blank" rel="noopener" class="admin-brand-link">
+            <a href="https://github.com/jiujiu532/grok2api" target="_blank" rel="noopener" class="admin-brand-link">
+              <span class="admin-brand-mark" aria-hidden="true">G</span>
               <span class="admin-brand">Grok2API</span>
             </a>
             <a href="https://blog.cheny.me/" target="_blank" rel="noopener" class="admin-username" id="hd-user">@Chenyme</a>
+            <a href="https://github.com/jiujiu532" target="_blank" rel="noopener" class="admin-username">@jiu</a>
           </div>
           <nav class="admin-nav">
             <a href="/admin/dashboard" class="admin-nav-link" data-nav="/admin/dashboard" data-i18n="header.dashboard">仪表盘</a>
@@ -566,6 +791,7 @@ window.renderAdminHeader = async function renderAdminHeader() {
             <a href="/admin/cache" class="admin-nav-link" data-nav="/admin/cache" data-i18n="header.cache">缓存管理</a>
           </nav>
           <div class="admin-header-right">
+            <button type="button" class="admin-header-version" id="hd-version" aria-label="Version">—</button>
             <div class="admin-lang-menu" id="hd-lang-menu">
               <button type="button" class="btn admin-header-control admin-lang-trigger" id="hd-lang-trigger" aria-label="Language" aria-haspopup="menu" aria-expanded="false">
                 <span class="admin-lang-trigger-code" id="hd-lang-code">CN</span>
@@ -612,6 +838,18 @@ window.renderAdminHeader = async function renderAdminHeader() {
       </header>`;
   }
 
+  // 兜底：旧缓存若残留不可点的 version tag，就地替换成可点按钮
+  const staleTag = mount.querySelector('#hd-version-tag');
+  if (staleTag && !mount.querySelector('#hd-version')) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'admin-header-version';
+    btn.id = 'hd-version';
+    btn.setAttribute('aria-label', 'Version');
+    btn.textContent = '—';
+    staleTag.replaceWith(btn);
+  }
+
   const active = mount.dataset.active || location.pathname;
   mount.querySelectorAll('[data-nav]').forEach((link) => {
     link.classList.toggle('active', link.dataset.nav === active);
@@ -622,8 +860,30 @@ window.renderAdminHeader = async function renderAdminHeader() {
   applyVersion();
   syncLanguageMenu?.();
 
+  const bindVersionClick = () => {
+    const node = mount.querySelector('#hd-version');
+    if (!(node instanceof HTMLElement) || node.dataset.boundVersionClick === '1') return;
+    node.dataset.boundVersionClick = '1';
+    node.style.pointerEvents = 'auto';
+    node.style.cursor = 'pointer';
+    node.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openVersionModal();
+    });
+  };
+  bindVersionClick();
+
+  // 后台静默检查更新，避免版本徽标永远停在“无更新”灰色态
+  refreshUpdate(false).then(() => {
+    applyVersion();
+  }).catch(() => {});
+
   const versionModal = ensureVersionModal();
   versionModal.querySelector('#admin-version-modal-refresh')?.addEventListener('click', async () => {
+    applyStatus = 'idle';
+    applyResult = null;
+    updateStatus = 'loading';
     renderVersionModal(versionModal);
     try {
       await refreshUpdate(true);
@@ -633,5 +893,8 @@ window.renderAdminHeader = async function renderAdminHeader() {
         renderVersionModal(versionModal);
       }
     }
+  });
+  versionModal.querySelector('#admin-version-modal-apply')?.addEventListener('click', () => {
+    applyUpdate();
   });
 };

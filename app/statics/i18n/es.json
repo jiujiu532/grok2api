@@ -133,18 +133,33 @@
     "cache": "Gestión de Caché",
     "languageLabel": "Idioma",
     "logout": "Cerrar sesión",
-    "versionDialogTitle": "Versión",
+    "versionDialogTitle": "Online Update",
     "versionCurrent": "Actual",
     "versionLatest": "Última",
     "versionPublishedAt": "Publicada",
     "versionUpToDate": "Ya está usando la versión más reciente.",
     "versionUpdateAvailable": "Hay una nueva versión disponible.",
     "versionChecking": "Comprobando actualizaciones...",
-    "versionRefresh": "Buscar actualizaciones",
+    "versionRefresh": "Check now",
     "versionUnavailable": "No se pudo comprobar las actualizaciones.",
     "versionNotesEmpty": "No hay notas de versión disponibles.",
     "versionOpenRelease": "Abrir release",
-    "versionClose": "Cerrar"
+    "versionClose": "Cerrar",
+    "versionApply": "Safe update & restart",
+    "versionApplying": "Updating safely...",
+    "versionApplyOk": "Merged upstream safely.",
+    "versionApplyBlockedDirty": "Local uncommitted changes detected. Auto-update refused to avoid overwrite.",
+    "versionApplyConflict": "Merge conflict detected. Aborted. Check the log and ask an agent to help merge.",
+    "versionApplyFailed": "Safe update failed.",
+    "versionApplyUpToDate": "Already up to date. Nothing to merge.",
+    "versionApplyNeedRestart": "Merge succeeded, but auto-restart was not scheduled. Please restart manually.",
+    "versionConflictReport": "Conflict report",
+    "versionInfoSection": "Version info",
+    "versionBuildType": "Build type",
+    "versionNotes": "Release notes",
+    "versionNotesFor": "Notes for {version}",
+    "versionCheckFailed": "Update check failed",
+    "versionApplyRestarting": "Merged safely. Service is restarting to load the new code."
   },
   "account": {
     "pageTitle": "Grok2API - Cuentas",
@@ -381,67 +396,204 @@
         }
       },
       "fields": {
-        "appUrl": { "label": "URL base de APP" },
-        "appKey": { "label": "Contraseña de acceso APP" },
-        "apiKey": { "label": "Clave de acceso API" },
-        "webuiEnabled": { "label": "Activar WebUI" },
-        "webuiKey": { "label": "Contraseña de acceso WebUI" },
-        "temporary": { "label": "Sesiones temporales" },
-        "memory": { "label": "Memoria de conversación" },
-        "stream": { "label": "Streaming predeterminado" },
-        "thinking": { "label": "Salida de razonamiento predeterminada" },
-        "autoChatModeFallback": { "label": "Reserva de modo AUTO para chat" },
-        "thinkingSummary": { "label": "Razonamiento condensado" },
-        "dynamicStatsig": { "label": "Statsig dinámico" },
-        "enableNsfw": { "label": "Permitir generación NSFW" },
-        "showSearchSources": { "label": "Agregar fuentes al contenido", "desc": "Las fuentes de búsqueda siempre se incluyen en el campo search_sources. Esta opción controla si también se agrega una sección ## Sources al contenido (para compatibilidad con clientes que analizan texto)." },
-        "customInstruction": { "label": "Instrucción suplementaria global" },
-        "imageFormat": { "label": "Formato de salida de imagen", "desc": "grok_url y grok_md devuelven directamente la dirección nativa del CDN de Grok de forma predeterminada. Los modos local_* descargan primero los recursos en el servidor y los vuelven a exponer mediante el proxy local. base64 devuelve un Data URI integrado. Cuando el proxy de imágenes Imagine Public está activado, las imágenes imagine-public devueltas por WebSocket también se sirven mediante el proxy local." },
-        "imaginePublicImageProxy": { "label": "Proxy de imágenes Imagine Public", "desc": "Cuando está activado, las imágenes imagine-public devueltas por WebSocket se descargan en el servidor y se entregan mediante el proxy local. Cuando está desactivado, las imágenes públicas se devuelven directamente." },
-        "videoFormat": { "label": "Formato de salida de video" },
-        "refreshEnabled": { "label": "Activar actualización de cuota", "desc": "Al activarlo, el sistema cambia automáticamente al modo de actualización de cuota. Al desactivarlo, cambia automáticamente al modo de reintento automático.", "help": "Activado: modo de actualización de cuota. El scheduler sincroniza periódicamente la cuota real y la selección usa puntuación.\nDesactivado: modo de reintento automático. No comprueba upstream activamente, usa selección aleatoria y cambia de cuenta al fallar hasta 5 reintentos.\nRecomendación: desactívalo con más de 10.000 cuentas para evitar provocar 429 de upstream con comprobaciones activas." },
-        "maxInflight": { "label": "Máximo en curso por cuenta", "desc": "Máximo de solicitudes simultáneas en curso por cuenta. Las cuentas en ese límite se omiten en la selección (compartido por ambos modos)." },
-        "basicInterval": { "label": "Ciclo Basic (s)", "desc": "Ciclo compartido del pool Basic: se usa para la actualización en segundo plano en modo quota y para el enfriamiento tras 429 en modo random. Valor por defecto: 86400s." },
-        "superInterval": { "label": "Ciclo Super (s)", "desc": "Ciclo compartido del pool Super: se usa para la actualización en segundo plano en modo quota y para el enfriamiento tras 429 en modo random. Valor por defecto: 7200s." },
-        "heavyInterval": { "label": "Ciclo Heavy (s)", "desc": "Ciclo compartido del pool Heavy: se usa para la actualización en segundo plano en modo quota y para el enfriamiento tras 429 en modo random. Valor por defecto: 7200s." },
-        "usageConcurrency": { "label": "Concurrencia de actualización", "desc": "Número máximo de llamadas usage paralelas permitidas durante la actualización de cuota." },
-        "onDemandMinInterval": { "label": "Intervalo de actualización bajo demanda (s)", "desc": "Ventana de limitación para actualizaciones activadas por solicitudes, como el manejo de 429. Los disparos repetidos dentro del intervalo se agrupan en una sola actualización." },
-        "imageCacheMaxMb": { "label": "Límite de caché de imágenes (MB)", "desc": "0 desactiva el límite. Solo se aplica a los archivos multimedia guardados por el proxy local. Cuando se supera el límite, se eliminan primero los archivos más antiguos hasta volver al 60% del límite." },
-        "videoCacheMaxMb": { "label": "Límite de caché de video (MB)", "desc": "0 desactiva el límite. Solo se aplica a los archivos multimedia guardados por el proxy local. Cuando se supera el límite, se eliminan primero los archivos más antiguos hasta volver al 60% del límite." },
-        "nsfwConcurrency": { "label": "Concurrencia de activación NSFW" },
-        "refreshConcurrency": { "label": "Concurrencia de refresco de Usage" },
-        "assetUploadConcurrency": { "label": "Concurrencia de carga de Asset" },
-        "assetListConcurrency": { "label": "Concurrencia de listado de Asset" },
-        "assetDeleteConcurrency": { "label": "Concurrencia de eliminación de Asset" },
-        "proxyMode": { "label": "Modo de proxy" },
-        "proxyUrl": { "label": "URL de proxy principal" },
-        "resourceProxyUrl": { "label": "URL de proxy de recursos" },
-        "proxyPool": { "label": "Pool de proxy principal" },
-        "resourceProxyPool": { "label": "Pool de proxy de recursos" },
-        "skipSslVerify": { "label": "Omitir verificación SSL" },
-        "clearanceMode": { "label": "Modo de Clearance" },
-        "browserFingerprint": { "label": "Huella del navegador" },
-        "userAgent": { "label": "User-Agent" },
-        "cfCookies": { "label": "Cookies de Cloudflare" },
-        "flaresolverrUrl": { "label": "URL de FlareSolverr" },
-        "challengeTimeout": { "label": "Tiempo de espera del desafío (s)" },
-        "refreshInterval": { "label": "Intervalo de actualización (s)" },
-        "maxRetries": { "label": "Límite de reintentos de cuenta" },
-        "retryCodes": { "label": "Códigos de estado para reintento" },
-        "resetSessionCodes": { "label": "Códigos para reinicio de sesión" },
-        "chatTimeout": { "label": "Tiempo de espera de chat (s)" },
-        "imageTimeout": { "label": "Tiempo de espera de imagen (s)" },
-        "videoTimeout": { "label": "Tiempo de espera de video (s)" },
-        "voiceTimeout": { "label": "Tiempo de espera de voz (s)" },
-        "nsfwTimeout": { "label": "Tiempo de espera de NSFW (s)" },
-        "assetUploadTimeout": { "label": "Tiempo de espera de carga de Asset (s)" },
-        "assetDownloadTimeout": { "label": "Tiempo de espera de descarga de Asset (s)" },
-        "assetListTimeout": { "label": "Tiempo de espera de listado de Asset (s)" },
-        "assetDeleteTimeout": { "label": "Tiempo de espera de eliminación de Asset (s)" },
-        "streamTimeout": { "label": "Tiempo de espera de inactividad en streaming (s)" },
-        "interRoundWait": { "label": "Espera entre rondas (s)" },
-        "fileLogLevel": { "label": "Nivel de registro en archivo", "desc": "Nivel mínimo escrito en archivos de registro, configurable independientemente de la consola. Por defecto: INFO." },
-        "logMaxFiles": { "label": "Retención de registros (días)", "desc": "Número máximo de archivos de registro diarios a conservar durante la rotación. Por defecto: 7." }
+        "appUrl": {
+          "label": "URL base de APP"
+        },
+        "appKey": {
+          "label": "Contraseña de acceso APP"
+        },
+        "apiKey": {
+          "label": "Clave de acceso API"
+        },
+        "webuiEnabled": {
+          "label": "Activar WebUI"
+        },
+        "webuiKey": {
+          "label": "Contraseña de acceso WebUI"
+        },
+        "temporary": {
+          "label": "Sesiones temporales"
+        },
+        "memory": {
+          "label": "Memoria de conversación"
+        },
+        "stream": {
+          "label": "Streaming predeterminado"
+        },
+        "thinking": {
+          "label": "Salida de razonamiento predeterminada"
+        },
+        "autoChatModeFallback": {
+          "label": "Reserva de modo AUTO para chat"
+        },
+        "thinkingSummary": {
+          "label": "Razonamiento condensado"
+        },
+        "dynamicStatsig": {
+          "label": "Statsig dinámico"
+        },
+        "enableNsfw": {
+          "label": "Permitir generación NSFW"
+        },
+        "showSearchSources": {
+          "label": "Agregar fuentes al contenido",
+          "desc": "Las fuentes de búsqueda siempre se incluyen en el campo search_sources. Esta opción controla si también se agrega una sección ## Sources al contenido (para compatibilidad con clientes que analizan texto)."
+        },
+        "customInstruction": {
+          "label": "Instrucción suplementaria global"
+        },
+        "imageFormat": {
+          "label": "Formato de salida de imagen",
+          "desc": "grok_url y grok_md devuelven directamente la dirección nativa del CDN de Grok de forma predeterminada. Los modos local_* descargan primero los recursos en el servidor y los vuelven a exponer mediante el proxy local. base64 devuelve un Data URI integrado. Cuando el proxy de imágenes Imagine Public está activado, las imágenes imagine-public devueltas por WebSocket también se sirven mediante el proxy local."
+        },
+        "imaginePublicImageProxy": {
+          "label": "Proxy de imágenes Imagine Public",
+          "desc": "Cuando está activado, las imágenes imagine-public devueltas por WebSocket se descargan en el servidor y se entregan mediante el proxy local. Cuando está desactivado, las imágenes públicas se devuelven directamente."
+        },
+        "videoFormat": {
+          "label": "Formato de salida de video"
+        },
+        "refreshEnabled": {
+          "label": "Activar actualización de cuota",
+          "desc": "Al activarlo, el sistema cambia automáticamente al modo de actualización de cuota. Al desactivarlo, cambia automáticamente al modo de reintento automático.",
+          "help": "Activado: modo de actualización de cuota. El scheduler sincroniza periódicamente la cuota real y la selección usa puntuación.\nDesactivado: modo de reintento automático. No comprueba upstream activamente, usa selección aleatoria y cambia de cuenta al fallar hasta 5 reintentos.\nRecomendación: desactívalo con más de 10.000 cuentas para evitar provocar 429 de upstream con comprobaciones activas."
+        },
+        "maxInflight": {
+          "label": "Máximo en curso por cuenta",
+          "desc": "Máximo de solicitudes simultáneas en curso por cuenta. Las cuentas en ese límite se omiten en la selección (compartido por ambos modos)."
+        },
+        "basicInterval": {
+          "label": "Ciclo Basic (s)",
+          "desc": "Ciclo compartido del pool Basic: se usa para la actualización en segundo plano en modo quota y para el enfriamiento tras 429 en modo random. Valor por defecto: 86400s."
+        },
+        "superInterval": {
+          "label": "Ciclo Super (s)",
+          "desc": "Ciclo compartido del pool Super: se usa para la actualización en segundo plano en modo quota y para el enfriamiento tras 429 en modo random. Valor por defecto: 7200s."
+        },
+        "heavyInterval": {
+          "label": "Ciclo Heavy (s)",
+          "desc": "Ciclo compartido del pool Heavy: se usa para la actualización en segundo plano en modo quota y para el enfriamiento tras 429 en modo random. Valor por defecto: 7200s."
+        },
+        "usageConcurrency": {
+          "label": "Concurrencia de actualización",
+          "desc": "Número máximo de llamadas usage paralelas permitidas durante la actualización de cuota."
+        },
+        "onDemandMinInterval": {
+          "label": "Intervalo de actualización bajo demanda (s)",
+          "desc": "Ventana de limitación para actualizaciones activadas por solicitudes, como el manejo de 429. Los disparos repetidos dentro del intervalo se agrupan en una sola actualización."
+        },
+        "imageCacheMaxMb": {
+          "label": "Límite de caché de imágenes (MB)",
+          "desc": "0 desactiva el límite. Solo se aplica a los archivos multimedia guardados por el proxy local. Cuando se supera el límite, se eliminan primero los archivos más antiguos hasta volver al 60% del límite."
+        },
+        "videoCacheMaxMb": {
+          "label": "Límite de caché de video (MB)",
+          "desc": "0 desactiva el límite. Solo se aplica a los archivos multimedia guardados por el proxy local. Cuando se supera el límite, se eliminan primero los archivos más antiguos hasta volver al 60% del límite."
+        },
+        "nsfwConcurrency": {
+          "label": "Concurrencia de activación NSFW"
+        },
+        "refreshConcurrency": {
+          "label": "Concurrencia de refresco de Usage"
+        },
+        "assetUploadConcurrency": {
+          "label": "Concurrencia de carga de Asset"
+        },
+        "assetListConcurrency": {
+          "label": "Concurrencia de listado de Asset"
+        },
+        "assetDeleteConcurrency": {
+          "label": "Concurrencia de eliminación de Asset"
+        },
+        "proxyMode": {
+          "label": "Modo de proxy"
+        },
+        "proxyUrl": {
+          "label": "URL de proxy principal"
+        },
+        "resourceProxyUrl": {
+          "label": "URL de proxy de recursos"
+        },
+        "proxyPool": {
+          "label": "Pool de proxy principal"
+        },
+        "resourceProxyPool": {
+          "label": "Pool de proxy de recursos"
+        },
+        "skipSslVerify": {
+          "label": "Omitir verificación SSL"
+        },
+        "clearanceMode": {
+          "label": "Modo de Clearance"
+        },
+        "browserFingerprint": {
+          "label": "Huella del navegador"
+        },
+        "userAgent": {
+          "label": "User-Agent"
+        },
+        "cfCookies": {
+          "label": "Cookies de Cloudflare"
+        },
+        "flaresolverrUrl": {
+          "label": "URL de FlareSolverr"
+        },
+        "challengeTimeout": {
+          "label": "Tiempo de espera del desafío (s)"
+        },
+        "refreshInterval": {
+          "label": "Intervalo de actualización (s)"
+        },
+        "maxRetries": {
+          "label": "Límite de reintentos de cuenta"
+        },
+        "retryCodes": {
+          "label": "Códigos de estado para reintento"
+        },
+        "resetSessionCodes": {
+          "label": "Códigos para reinicio de sesión"
+        },
+        "chatTimeout": {
+          "label": "Tiempo de espera de chat (s)"
+        },
+        "imageTimeout": {
+          "label": "Tiempo de espera de imagen (s)"
+        },
+        "videoTimeout": {
+          "label": "Tiempo de espera de video (s)"
+        },
+        "voiceTimeout": {
+          "label": "Tiempo de espera de voz (s)"
+        },
+        "nsfwTimeout": {
+          "label": "Tiempo de espera de NSFW (s)"
+        },
+        "assetUploadTimeout": {
+          "label": "Tiempo de espera de carga de Asset (s)"
+        },
+        "assetDownloadTimeout": {
+          "label": "Tiempo de espera de descarga de Asset (s)"
+        },
+        "assetListTimeout": {
+          "label": "Tiempo de espera de listado de Asset (s)"
+        },
+        "assetDeleteTimeout": {
+          "label": "Tiempo de espera de eliminación de Asset (s)"
+        },
+        "streamTimeout": {
+          "label": "Tiempo de espera de inactividad en streaming (s)"
+        },
+        "interRoundWait": {
+          "label": "Espera entre rondas (s)"
+        },
+        "fileLogLevel": {
+          "label": "Nivel de registro en archivo",
+          "desc": "Nivel mínimo escrito en archivos de registro, configurable independientemente de la consola. Por defecto: INFO."
+        },
+        "logMaxFiles": {
+          "label": "Retención de registros (días)",
+          "desc": "Número máximo de archivos de registro diarios a conservar durante la rotación. Por defecto: 7."
+        }
       }
     }
   },
