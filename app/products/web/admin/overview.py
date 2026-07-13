@@ -61,11 +61,33 @@ async def _database_health(request: Request) -> dict:
         }
 
 
+async def _oauth_plan_counts(request: Request) -> dict[str, int]:
+    repo = getattr(request.app.state, "repository", None)
+    if repo is None:
+        return {}
+    snapshot = await repo.runtime_snapshot()
+    plans: dict[str, int] = {}
+    for record in snapshot.items:
+        if "oauth" not in record.tags or record.is_deleted():
+            continue
+        plan = str(
+            record.ext.get("oauth_subscription_label")
+            or record.ext.get("oauth_subscription_tier")
+            or "OAuth"
+        )
+        plans[plan] = plans.get(plan, 0) + 1
+    return plans
+
+
 @router.get("/overview")
 async def overview(request: Request):
     accounts = await request.app.state.directory.diagnostics()
     system = process_health.snapshot()
-    database = await _database_health(request)
+    database, oauth_plans = await asyncio.gather(
+        _database_health(request),
+        _oauth_plan_counts(request),
+    )
+    accounts["oauth_plans"] = oauth_plans
     status = accounts["status"]
     available = int(status.get("active", 0))
     manageable = available + int(status.get("cooling", 0))

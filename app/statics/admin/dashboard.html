@@ -155,6 +155,7 @@
     .pool-fill { display:block; width:0; height:100%; border-radius:inherit; background:#2563eb; transition:width .25s }
     .pool-fill.super { background:#7c3aed }
     .pool-fill.heavy { background:#d97706 }
+    .pool-fill.oauth { background:#7c3aed }
     .trend-grid {
       display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px;
       margin-top:12px;
@@ -646,11 +647,24 @@ function renderOverview(data) {
       .join('');
 
   const pools = accounts.pools || {};
+  const oauthPlans = accounts.oauth_plans || {};
   const poolTotal = Math.max(1, total);
-  $('pool-grid').innerHTML = ['basic','super','heavy'].map((name) => {
-    const count = Number(pools[name] || 0);
+  const poolEntries = [
+    ...(['basic','super','heavy']
+      .filter((name) => Number(authTypes.sso || 0) > 0 || Number(pools[name] || 0) > 0)
+      .map((name) => ({ name, count: Number(pools[name] || 0), className: name }))),
+    ...Object.entries(oauthPlans).map(([name, count]) => ({
+      name,
+      count: Number(count || 0),
+      className: 'oauth',
+    })),
+  ];
+  if (!Object.keys(oauthPlans).length && Number(pools.oauth || 0) > 0) {
+    poolEntries.push({ name: 'OAuth', count: Number(pools.oauth), className: 'oauth' });
+  }
+  $('pool-grid').innerHTML = poolEntries.map(({ name, count, className }) => {
     const width = Math.min(100, count * 100 / poolTotal);
-    return `<article class="pool-card"><div class="pool-row"><span class="pool-name">${name}</span><span class="pool-count">${fmt(count)}</span></div><div class="pool-track"><span class="pool-fill ${name}" style="width:${width}%"></span></div></article>`;
+    return `<article class="pool-card"><div class="pool-row"><span class="pool-name">${escapeHtml(name)}</span><span class="pool-count">${fmt(count)}</span></div><div class="pool-track"><span class="pool-fill ${className}" style="width:${width}%"></span></div></article>`;
   }).join('');
 }
 

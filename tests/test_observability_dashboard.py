@@ -296,7 +296,10 @@ class AccountDiagnosticsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["total"], 2)
         self.assertEqual(result["status"]["active"], 1)
         self.assertEqual(result["status"]["cooling"], 1)
-        self.assertEqual(result["pools"], {"basic": 1, "super": 1, "heavy": 0})
+        self.assertEqual(
+            result["pools"],
+            {"basic": 1, "super": 0, "heavy": 0, "oauth": 1},
+        )
         self.assertEqual(result["auth_types"], {"sso": 1, "oauth": 1})
         self.assertEqual(result["quota_remaining"]["auto"], 7)
         self.assertEqual(
@@ -308,6 +311,31 @@ class AccountDiagnosticsTests(unittest.IsolatedAsyncioTestCase):
 
 
 class AdminOverviewTests(unittest.IsolatedAsyncioTestCase):
+    async def test_oauth_plan_counts_use_subscription_not_storage_pool(self):
+        record = types.SimpleNamespace(
+            tags=["oauth"],
+            ext={
+                "oauth_subscription_label": "SuperGrok",
+                "oauth_subscription_tier": "GrokPro",
+            },
+            is_deleted=lambda: False,
+        )
+        repository = types.SimpleNamespace(
+            runtime_snapshot=AsyncMock(
+                return_value=types.SimpleNamespace(items=[record])
+            )
+        )
+        request = types.SimpleNamespace(
+            app=types.SimpleNamespace(
+                state=types.SimpleNamespace(repository=repository)
+            )
+        )
+
+        self.assertEqual(
+            await overview_module._oauth_plan_counts(request),
+            {"SuperGrok": 1},
+        )
+
     async def test_overview_reports_account_pool_health(self):
         request = types.SimpleNamespace(
             app=types.SimpleNamespace(
@@ -326,7 +354,7 @@ class AdminOverviewTests(unittest.IsolatedAsyncioTestCase):
                 "expired": 0,
                 "disabled": 0,
             },
-            "pools": {"basic": 0, "super": 0, "heavy": 0},
+            "pools": {"basic": 0, "super": 0, "heavy": 0, "oauth": 0},
             "quota_remaining": {},
             "inflight": 0,
             "average_health": 0.0,

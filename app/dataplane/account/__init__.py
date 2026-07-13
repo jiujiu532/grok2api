@@ -322,7 +322,7 @@ class AccountDirectory:
             "expired": 0,
             "disabled": 0,
         }
-        pool_counts = {"basic": 0, "super": 0, "heavy": 0}
+        pool_counts = {"basic": 0, "super": 0, "heavy": 0, "oauth": 0}
         auth_types = {"sso": 0, "oauth": 0}
         quota_names = ("auto", "fast", "expert", "heavy", "grok_4_3", "console")
         quota_remaining = dict.fromkeys(quota_names, 0)
@@ -357,9 +357,13 @@ class AccountDirectory:
                 else:
                     health_bands["healthy"] += 1
 
-                pool = POOL_ID_TO_STR.get(int(table.pool_by_idx[idx]), "basic")
-                pool_counts[pool] = pool_counts.get(pool, 0) + 1
-                auth_types["oauth" if idx in oauth_indices else "sso"] += 1
+                if idx in oauth_indices:
+                    pool_counts["oauth"] += 1
+                    auth_types["oauth"] += 1
+                else:
+                    pool = POOL_ID_TO_STR.get(int(table.pool_by_idx[idx]), "basic")
+                    pool_counts[pool] = pool_counts.get(pool, 0) + 1
+                    auth_types["sso"] += 1
                 inflight += int(table.inflight_by_idx[idx])
                 health_total += health
                 if is_active:
