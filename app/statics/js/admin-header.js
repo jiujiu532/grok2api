@@ -560,6 +560,7 @@ window.renderAdminHeader = async function renderAdminHeader() {
             <a href="https://blog.cheny.me/" target="_blank" rel="noopener" class="admin-username" id="hd-user">@Chenyme</a>
           </div>
           <nav class="admin-nav">
+            <a href="/admin/dashboard" class="admin-nav-link" data-nav="/admin/dashboard" data-i18n="header.dashboard">仪表盘</a>
             <a href="/admin/account" class="admin-nav-link" data-nav="/admin/account" data-i18n="header.account">账户管理</a>
             <a href="/admin/config" class="admin-nav-link" data-nav="/admin/config" data-i18n="header.config">配置管理</a>
             <a href="/admin/cache" class="admin-nav-link" data-nav="/admin/cache" data-i18n="header.cache">缓存管理</a>

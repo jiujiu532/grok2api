@@ -14,6 +14,7 @@ Multi-worker notes:
 import asyncio
 import os
 import platform
+import sqlite3
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -30,11 +31,40 @@ from app.platform.logging.logger import logger, setup_logging, reload_logging
 from app.platform.config.snapshot import config as _config
 from app.platform.errors import AppError
 from app.platform.meta import get_project_version
+from app.platform.observability import (
+    RequestObservabilityMiddleware,
+    http_metrics,
+    request_id as resolve_request_id,
+)
 from app.platform.paths import data_path
 from app.platform.storage import reconcile_local_media_cache_async
 
 
 load_dotenv()
+
+
+def _unhandled_error_headers(request: Request) -> dict[str, str]:
+    """Preserve trace/security headers when Starlette handles an outer 500."""
+    req_id = getattr(request.state, "request_id", None) or resolve_request_id(
+        request.headers.get("x-request-id")
+    )
+    headers = {
+        "X-Request-ID": req_id,
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "Referrer-Policy": "same-origin",
+    }
+    origin = request.headers.get("origin")
+    if origin:
+        headers.update(
+            {
+                "Access-Control-Allow-Origin": origin,
+                "Access-Control-Allow-Credentials": "true",
+                "Access-Control-Expose-Headers": "X-Request-ID",
+                "Vary": "Origin",
+            }
+        )
+    return headers
 
 
 # ---------------------------------------------------------------------------
@@ -102,6 +132,13 @@ setup_logging(
 async def lifespan(app: FastAPI):
     # 1. Load configuration.
     await _config.load()
+    try:
+        http_metrics.enable_persistence(data_path("observability.db"))
+    except (OSError, sqlite3.Error) as exc:
+        logger.warning(
+            "persistent HTTP metrics disabled: error_type={}",
+            type(exc).__name__,
+        )
     reload_logging(
         level=os.getenv("LOG_LEVEL", "INFO"),
         file_level=_config.get_str("logging.file_level", "") or None,
@@ -202,6 +239,10 @@ async def lifespan(app: FastAPI):
     refresh_svc = AccountRefreshService(repo)
     set_refresh_service(refresh_svc)
     app.state.refresh_service = refresh_svc
+
+    from app.control.account.oauth import GrokOAuthService
+
+    app.state.oauth_service = GrokOAuthService(repo)
 
     is_leader = _try_acquire_scheduler_lock()
     scheduler = get_account_refresh_scheduler(refresh_svc)
@@ -336,6 +377,7 @@ async def lifespan(app: FastAPI):
     set_refresh_scheduler_leader(False)
     set_refresh_service(None)
     await repo.close()
+    http_metrics.close_persistence()
     logger.info("application shutdown completed")
 
 
@@ -379,6 +421,10 @@ def create_app() -> FastAPI:
             "name": "Admin - Tokens",
             "description": "Admin account token management endpoints.",
         },
+        {
+            "name": "Admin - OAuth",
+            "description": "xAI OAuth device-login account import endpoints.",
+        },
         {"name": "Admin - Batch", "description": "Admin batch operation endpoints."},
         {
             "name": "Admin - Assets",
@@ -409,7 +455,9 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["X-Request-ID"],
     )
+    app.add_middleware(RequestObservabilityMiddleware)
 
     # Ensure config is loaded on every request.
     @app.middleware("http")
@@ -460,10 +508,19 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(Exception)
     async def _generic_error_handler(request: Request, exc: Exception):
-        logger.exception("unhandled application exception: error={}", exc)
+        headers = _unhandled_error_headers(request)
+        logger.exception(
+            "unhandled application exception: request_id={} method={} path={} "
+            "error={}",
+            headers["X-Request-ID"],
+            request.method,
+            request.url.path,
+            exc,
+        )
         return JSONResponse(
             {"error": {"message": "Internal server error", "type": "server_error"}},
             status_code=500,
+            headers=headers,
         )
 
     # Routers.

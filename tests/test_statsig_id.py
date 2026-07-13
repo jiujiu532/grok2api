@@ -9,28 +9,35 @@ from unittest.mock import patch
 
 def _load_headers_module():
     logger_stub = types.SimpleNamespace(debug=lambda *args, **kwargs: None)
-    sys.modules.setdefault("app", types.ModuleType("app"))
-    sys.modules.setdefault("app.platform", types.ModuleType("app.platform"))
-    sys.modules.setdefault("app.platform.logging", types.ModuleType("app.platform.logging"))
-    sys.modules["app.platform.logging.logger"] = types.SimpleNamespace(logger=logger_stub)
-    sys.modules.setdefault("app.platform.config", types.ModuleType("app.platform.config"))
-    sys.modules["app.platform.config.snapshot"] = types.SimpleNamespace(get_config=lambda: None)
-    sys.modules.setdefault("app.control", types.ModuleType("app.control"))
-    sys.modules.setdefault("app.control.proxy", types.ModuleType("app.control.proxy"))
-    sys.modules["app.control.proxy.models"] = types.SimpleNamespace(ProxyLease=object)
-    sys.modules.setdefault("app.dataplane", types.ModuleType("app.dataplane"))
-    sys.modules.setdefault("app.dataplane.proxy", types.ModuleType("app.dataplane.proxy"))
-    sys.modules.setdefault("app.dataplane.proxy.adapters", types.ModuleType("app.dataplane.proxy.adapters"))
-    sys.modules["app.dataplane.proxy.adapters.profile"] = types.SimpleNamespace(
-        ProxyProfile=object,
-        resolve_proxy_profile=lambda lease: None,
+    stubs = {
+        "app": types.ModuleType("app"),
+        "app.platform": types.ModuleType("app.platform"),
+        "app.platform.logging": types.ModuleType("app.platform.logging"),
+        "app.platform.logging.logger": types.SimpleNamespace(logger=logger_stub),
+        "app.platform.config": types.ModuleType("app.platform.config"),
+        "app.platform.config.snapshot": types.SimpleNamespace(get_config=lambda: None),
+        "app.control": types.ModuleType("app.control"),
+        "app.control.proxy": types.ModuleType("app.control.proxy"),
+        "app.control.proxy.models": types.SimpleNamespace(ProxyLease=object),
+        "app.dataplane": types.ModuleType("app.dataplane"),
+        "app.dataplane.proxy": types.ModuleType("app.dataplane.proxy"),
+        "app.dataplane.proxy.adapters": types.ModuleType(
+            "app.dataplane.proxy.adapters"
+        ),
+        "app.dataplane.proxy.adapters.profile": types.SimpleNamespace(
+            ProxyProfile=object,
+            resolve_proxy_profile=lambda lease: None,
+        ),
+    }
+    file_path = (
+        pathlib.Path(__file__).resolve().parents[1]
+        / "app/dataplane/proxy/adapters/headers.py"
     )
-
-    file_path = pathlib.Path(__file__).resolve().parents[1] / "app/dataplane/proxy/adapters/headers.py"
     spec = importlib.util.spec_from_file_location("test_headers_module", file_path)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
-    spec.loader.exec_module(module)
+    with patch.dict(sys.modules, stubs):
+        spec.loader.exec_module(module)
     return module
 
 

@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title data-i18n="dashboard.pageTitle">Grok2API - 仪表盘</title>
+  <link rel="icon" href="/favicon.ico?v={{APP_VERSION}}">
+  <link href="https://cdn.jsdelivr.net/npm/geist@1.0.0/dist/fonts/geist-sans/style.css" rel="stylesheet">
+  <link href="/static/css/app.css?v={{APP_VERSION}}" rel="stylesheet">
+  <style>
+    body { background:#FAF9F5 }
+    .page-hd {
+      display:flex; align-items:flex-start; justify-content:space-between;
+      gap:16px; margin-bottom:28px;
+    }
+    .page-title { font-size:24px; font-weight:700; line-height:1.2 }
+    .page-sub { margin-top:6px; color:var(--fg-muted); font-size:13px }
+    .refresh-btn {
+      height:34px; padding:0 14px; border:1px solid #e5e1d9; border-radius:999px;
+      display:inline-flex; align-items:center; gap:7px; background:#fff;
+      color:#3f3b35; font-size:12px; font-weight:600;
+    }
+    .refresh-btn:hover { border-color:#cbc4b8; background:#fdfcf9 }
+    .refresh-btn svg { width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:1.8 }
+    .refresh-btn.loading svg { animation:spin .8s linear infinite }
+    @keyframes spin { to { transform:rotate(360deg) } }
+    .status-hero {
+      position:relative; overflow:hidden; min-height:184px; padding:24px;
+      border:1px solid #e7e2d9; border-radius:18px; background:#fff;
+      display:grid; grid-template-columns:minmax(0,1fr) auto; gap:28px;
+      box-shadow:0 8px 30px rgba(42,37,30,.045);
+    }
+    .status-hero::before {
+      content:""; position:absolute; inset:-70% -15% auto 45%; height:260px;
+      border-radius:999px; background:radial-gradient(circle,#dbeafe 0,rgba(219,234,254,0) 70%);
+      opacity:.72; pointer-events:none;
+    }
+    .status-hero[data-status="degraded"]::before {
+      background:radial-gradient(circle,#fef3c7 0,rgba(254,243,199,0) 70%);
+    }
+    .status-hero[data-status="error"]::before {
+      background:radial-gradient(circle,#fee2e2 0,rgba(254,226,226,0) 70%);
+    }
+    .status-copy { position:relative; z-index:1; min-width:0 }
+    .status-eyebrow {
+      display:inline-flex; align-items:center; gap:8px; color:#207153;
+      font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase;
+    }
+    .status-dot {
+      width:8px; height:8px; border-radius:999px; background:#18a66f;
+      box-shadow:0 0 0 5px rgba(24,166,111,.11);
+    }
+    .status-hero[data-status="degraded"] .status-eyebrow { color:#9a630d }
+    .status-hero[data-status="degraded"] .status-dot {
+      background:#d78a14; box-shadow:0 0 0 5px rgba(215,138,20,.12);
+    }
+    .status-hero[data-status="error"] .status-eyebrow { color:#b63b34 }
+    .status-hero[data-status="error"] .status-dot {
+      background:#d84b43; box-shadow:0 0 0 5px rgba(216,75,67,.12);
+    }
+    .status-value {
+      margin-top:18px; color:#1d1a17; font-size:38px; font-weight:720;
+      line-height:1; letter-spacing:-.045em; font-variant-numeric:tabular-nums;
+    }
+    .status-label { margin-top:8px; color:#5e5952; font-size:13px; font-weight:650 }
+    .status-caption { margin-top:5px; color:#8f8981; font-size:12px }
+    .status-chips { margin-top:18px; display:flex; flex-wrap:wrap; gap:8px }
+    .status-chip {
+      min-height:28px; padding:0 10px; border:1px solid #ece7df; border-radius:999px;
+      background:rgba(255,255,255,.78); display:inline-flex; align-items:center; gap:6px;
+      color:#858078; font-size:10px;
+    }
+    .status-chip strong { color:#3d3934; font-size:11px; font-weight:700 }
+    .status-visual {
+      position:relative; z-index:1; width:128px; display:grid; place-items:center;
+    }
+    .status-orb {
+      width:104px; height:104px; border-radius:32px; display:grid; place-items:center;
+      color:#2563eb; background:linear-gradient(145deg,#eff6ff,#fff);
+      border:1px solid #e4ecfa; box-shadow:0 18px 45px rgba(37,99,235,.12);
+      transform:rotate(3deg);
+    }
+    .status-hero[data-status="degraded"] .status-orb {
+      color:#b86b0d; background:linear-gradient(145deg,#fff7e8,#fff);
+      border-color:#f4e4c6; box-shadow:0 18px 45px rgba(184,107,13,.1);
+    }
+    .status-hero[data-status="error"] .status-orb {
+      color:#c6423a; background:linear-gradient(145deg,#fff0ef,#fff);
+      border-color:#f4d8d6; box-shadow:0 18px 45px rgba(198,66,58,.1);
+    }
+    .status-orb svg {
+      width:47px; height:47px; fill:none; stroke:currentColor; stroke-width:1.6;
+      transform:rotate(-3deg);
+    }
+    .section { margin-top:28px }
+    .section-head {
+      display:flex; align-items:center; justify-content:space-between;
+      gap:12px; margin-bottom:12px;
+    }
+    .section-title { font-size:13px; font-weight:650; color:#292621 }
+    .section-note { color:#969087; font-size:11px; font-variant-numeric:tabular-nums }
+    .metric-grid {
+      display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:12px;
+    }
+    .metric-grid.runtime { grid-template-columns:repeat(5,minmax(0,1fr)) }
+    .metric-card {
+      min-height:112px; padding:16px; border:1px solid #eee9e1;
+      border-radius:15px; background:#fff; box-shadow:0 1px 2px rgba(31,28,24,.02);
+      display:flex; flex-direction:column; gap:13px;
+    }
+    .metric-top { display:flex; align-items:center; justify-content:space-between; gap:10px }
+    .metric-label { color:#858078; font-size:11px; font-weight:550 }
+    .metric-icon {
+      width:30px; height:30px; border-radius:10px; display:grid; place-items:center;
+      color:#5b6675; background:#f1f4f7;
+    }
+    .metric-icon.good { color:#16845b; background:#eaf7f1 }
+    .metric-icon.warn { color:#b76b0c; background:#fff4df }
+    .metric-icon.bad { color:#c6423a; background:#fdeceb }
+    .metric-icon svg { width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:1.8 }
+    .metric-value {
+      margin-top:auto; color:#1e1b18; font-size:25px; font-weight:680;
+      line-height:1; letter-spacing:-.03em; font-variant-numeric:tabular-nums;
+    }
+    .metric-sub { min-height:14px; color:#a09a91; font-size:11px }
+    .panel {
+      border:1px solid #eee9e1; border-radius:16px; background:#fff;
+      padding:18px; box-shadow:0 1px 2px rgba(31,28,24,.02);
+    }
+    .runtime-meta {
+      display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px;
+      margin-bottom:12px;
+    }
+    .meta-cell { padding:13px 14px; border-radius:12px; background:#f8f7f3 }
+    .meta-label { color:#99938a; font-size:10px }
+    .meta-value {
+      margin-top:6px; color:#36312b; font-size:13px; font-weight:650;
+      overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    }
+    .quota-grid { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:10px }
+    .quota-card { padding:14px; border-radius:12px; background:#f8f7f3 }
+    .quota-name { color:#8b857d; font-size:10px; text-transform:uppercase; letter-spacing:.05em }
+    .quota-value {
+      margin-top:8px; color:#25211d; font-size:20px; font-weight:680;
+      font-variant-numeric:tabular-nums;
+    }
+    .pool-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px }
+    .pool-card {
+      padding:15px; border:1px solid #eee9e1; border-radius:14px; background:#fff;
+    }
+    .pool-row { display:flex; align-items:center; justify-content:space-between; gap:12px }
+    .pool-name { color:#4c4740; font-size:12px; font-weight:650; text-transform:capitalize }
+    .pool-count { color:#777168; font-size:12px; font-variant-numeric:tabular-nums }
+    .pool-track { height:6px; margin-top:11px; border-radius:999px; background:#f0ede8; overflow:hidden }
+    .pool-fill { display:block; width:0; height:100%; border-radius:inherit; background:#2563eb; transition:width .25s }
+    .pool-fill.super { background:#7c3aed }
+    .pool-fill.heavy { background:#d97706 }
+    .trend-grid {
+      display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px;
+      margin-top:12px;
+    }
+    .trend-card {
+      min-width:0; padding:16px; border:1px solid #eee9e1; border-radius:14px;
+      background:#fcfbf8;
+    }
+    .trend-head {
+      display:flex; align-items:flex-start; justify-content:space-between;
+      gap:12px; margin-bottom:12px;
+    }
+    .trend-title { color:#39352f; font-size:12px; font-weight:700 }
+    .trend-summary {
+      margin-top:3px; color:#9a948b; font-size:10px; font-variant-numeric:tabular-nums;
+    }
+    .trend-legend { display:flex; align-items:center; gap:10px; color:#8e887f; font-size:10px }
+    .trend-legend span { display:inline-flex; align-items:center; gap:5px }
+    .trend-swatch { width:7px; height:7px; border-radius:999px; background:#2563eb }
+    .trend-swatch.error { background:#dc5a52 }
+    .sparkline { display:block; width:100%; height:132px; overflow:visible }
+    .request-log {
+      margin-top:12px; border:1px solid #eee9e1; border-radius:14px;
+      overflow:auto; background:#fcfbf8;
+    }
+    .request-log table { width:100%; border-collapse:collapse; min-width:680px }
+    .request-log th,.request-log td {
+      padding:10px 12px; border-bottom:1px solid #eee9e1; text-align:left;
+      color:#69635b; font-size:11px; white-space:nowrap;
+    }
+    .request-log th { color:#99938a; font-size:10px; font-weight:600; background:#f8f7f3 }
+    .request-log tr:last-child td { border-bottom:0 }
+    .request-log-path { max-width:320px; overflow:hidden; text-overflow:ellipsis }
+    .request-log-status { font-weight:700; color:#16845b }
+    .request-log-status.warn { color:#b76b0c }
+    .request-log-status.bad { color:#c6423a }
+    .quick-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px }
+    .quick-link {
+      min-height:70px; padding:15px; border:1px solid #eee9e1; border-radius:14px;
+      background:#fff; display:flex; align-items:center; justify-content:space-between;
+      gap:12px; color:#34302b; font-size:13px; font-weight:650;
+    }
+    .quick-link:hover { border-color:#cbc4b8; transform:translateY(-1px) }
+    .quick-link svg { width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:1.8 }
+    .empty-note { padding:28px; text-align:center; color:#9b958d; font-size:13px }
+    @media (max-width:1080px) {
+      .metric-grid,.metric-grid.runtime { grid-template-columns:repeat(3,minmax(0,1fr)) }
+      .quota-grid { grid-template-columns:repeat(3,minmax(0,1fr)) }
+    }
+    @media (max-width:700px) {
+      .page-hd { align-items:stretch }
+      .status-hero { grid-template-columns:1fr; min-height:0; padding:20px }
+      .status-visual { display:none }
+      .metric-grid,.metric-grid.runtime { grid-template-columns:repeat(2,minmax(0,1fr)) }
+      .runtime-meta,.pool-grid,.quick-grid { grid-template-columns:1fr }
+      .trend-grid { grid-template-columns:1fr }
+      .quota-grid { grid-template-columns:repeat(2,minmax(0,1fr)) }
+    }
+  </style>
+</head>
+<body>
+<div id="admin-header" data-active="/admin/dashboard"></div>
+
+<main class="admin-main" style="padding-bottom:60px">
+  <div class="page-hd">
+    <div>
+      <div class="page-title" data-i18n="dashboard.heading">仪表盘</div>
+      <div class="page-sub" data-i18n="dashboard.subtitle">先看账号池与请求健康，再决定要处理什么。</div>
+    </div>
+    <button type="button" class="refresh-btn" id="refresh" onclick="loadOverview()" aria-label="刷新">
+      <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0 2 5"/><path d="M20 4v7h-7"/></svg>
+      <span data-i18n="dashboard.refresh">刷新</span>
+    </button>
+  </div>
+
+  <section class="status-hero" id="status-hero" data-status="degraded">
+    <div class="status-copy">
+      <div class="status-eyebrow">
+        <span class="status-dot"></span>
+        <span id="status-text" data-i18n="dashboard.statusDegraded">等待配置</span>
+      </div>
+      <div class="status-value" id="hero-availability">—</div>
+      <div class="status-label" data-i18n="dashboard.heroLabel">可调度账号</div>
+      <div class="status-caption" id="hero-caption" data-i18n="dashboard.heroEmpty">还没有账号，先从账户管理中添加。</div>
+      <div class="status-chips">
+        <span class="status-chip"><span data-i18n="dashboard.version">版本</span><strong id="hero-version">—</strong></span>
+        <span class="status-chip"><span data-i18n="dashboard.storage">存储</span><strong id="hero-storage">—</strong></span>
+        <span class="status-chip"><span data-i18n="dashboard.errorRate">错误率</span><strong id="hero-error-rate">—</strong></span>
+      </div>
+    </div>
+    <div class="status-visual" aria-hidden="true">
+      <div class="status-orb">
+        <svg viewBox="0 0 48 48">
+          <path d="M5 25h8l4-10 7 22 5-16 4 8h10"/>
+          <rect x="4" y="4" width="40" height="40" rx="13"/>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <div class="section-title" data-i18n="dashboard.accounts">账号池</div>
+      <div class="section-note" id="updated-at" aria-live="polite">—</div>
+    </div>
+    <div class="metric-grid">
+      <article class="metric-card">
+        <div class="metric-top"><span class="metric-label" data-i18n="dashboard.totalAccounts">账户总数</span><span class="metric-icon"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9"/><path d="M16 3.1a4 4 0 0 1 0 7.8"/></svg></span></div>
+        <div class="metric-value" id="accounts-total">—</div>
+        <div class="metric-sub" id="accounts-manageable">—</div>
+      </article>
+      <article class="metric-card">
+        <div class="metric-top"><span class="metric-label" data-i18n="dashboard.activeAccounts">正常账户</span><span class="metric-icon good"><svg viewBox="0 0 24 24"><path d="m9 12 2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg></span></div>
+        <div class="metric-value" id="accounts-active">—</div><div class="metric-sub" id="accounts-health">—</div>
+      </article>
+      <article class="metric-card">
+        <div class="metric-top"><span class="metric-label" data-i18n="dashboard.coolingAccounts">限流账户</span><span class="metric-icon warn"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span></div>
+        <div class="metric-value" id="accounts-cooling">—</div><div class="metric-sub" data-i18n="dashboard.coolingHint">等待恢复</div>
+      </article>
+      <article class="metric-card">
+        <div class="metric-top"><span class="metric-label" data-i18n="dashboard.expiredAccounts">异常账户</span><span class="metric-icon bad"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6m0-6-6 6"/></svg></span></div>
+        <div class="metric-value" id="accounts-expired">—</div><div class="metric-sub" data-i18n="dashboard.expiredHint">需要处理</div>
+      </article>
+      <article class="metric-card">
+        <div class="metric-top"><span class="metric-label" data-i18n="dashboard.disabledAccounts">禁用账户</span><span class="metric-icon"><svg viewBox="0 0 24 24"><path d="M18 6 6 18"/><circle cx="12" cy="12" r="9"/></svg></span></div>
+        <div class="metric-value" id="accounts-disabled">—</div><div class="metric-sub" data-i18n="dashboard.disabledHint">不参与调度</div>
+      </article>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <div class="section-title" data-i18n="dashboard.runtime">请求运行状况</div>
+      <div class="section-note" id="runtime-scope">—</div>
+    </div>
+    <div class="panel">
+      <div class="runtime-meta">
+        <div class="meta-cell"><div class="meta-label" data-i18n="dashboard.storage">存储</div><div class="meta-value" id="runtime-storage">—</div></div>
+        <div class="meta-cell"><div class="meta-label" data-i18n="dashboard.strategy">选号策略</div><div class="meta-value" id="runtime-strategy">—</div></div>
+        <div class="meta-cell"><div class="meta-label" data-i18n="dashboard.revision">数据版本</div><div class="meta-value" id="runtime-revision">—</div></div>
+        <div class="meta-cell"><div class="meta-label" data-i18n="dashboard.scheduler">调度器</div><div class="meta-value" id="runtime-scheduler">—</div></div>
+      </div>
+      <div class="metric-grid runtime">
+        <article class="metric-card"><div class="metric-label" data-i18n="dashboard.requests">累计 API 请求</div><div class="metric-value" id="runtime-requests">—</div><div class="metric-sub" id="runtime-errors">—</div></article>
+        <article class="metric-card"><div class="metric-label" data-i18n="dashboard.activeRequests">正在处理</div><div class="metric-value" id="runtime-active">—</div><div class="metric-sub" data-i18n="dashboard.streamIncluded">包含流式响应</div></article>
+        <article class="metric-card"><div class="metric-label" data-i18n="dashboard.inflight">当前上游请求</div><div class="metric-value" id="runtime-inflight">—</div><div class="metric-sub" data-i18n="dashboard.accountLeases">账号租约</div></article>
+        <article class="metric-card"><div class="metric-label" data-i18n="dashboard.averageLatency">平均耗时</div><div class="metric-value" id="runtime-latency">—</div><div class="metric-sub" data-i18n="dashboard.fullResponse">完整响应生命周期</div></article>
+        <article class="metric-card"><div class="metric-label" data-i18n="dashboard.uptime">运行时长</div><div class="metric-value" id="runtime-uptime">—</div><div class="metric-sub" id="runtime-last">—</div></article>
+      </div>
+      <div class="trend-grid">
+        <article class="trend-card">
+          <div class="trend-head">
+            <div>
+              <div class="trend-title" data-i18n="dashboard.requestTrend">请求趋势</div>
+              <div class="trend-summary" id="request-trend-summary">—</div>
+            </div>
+            <div class="trend-legend">
+              <span><i class="trend-swatch"></i><span data-i18n="dashboard.seriesRequests">请求</span></span>
+              <span><i class="trend-swatch error"></i><span data-i18n="dashboard.seriesErrors">错误</span></span>
+            </div>
+          </div>
+          <svg class="sparkline" id="request-trend" viewBox="0 0 640 132" preserveAspectRatio="none" role="img" aria-label="Request trend"></svg>
+        </article>
+        <article class="trend-card">
+          <div class="trend-head">
+            <div>
+              <div class="trend-title" data-i18n="dashboard.latencyTrend">延迟趋势</div>
+              <div class="trend-summary" id="latency-trend-summary">—</div>
+            </div>
+            <div class="trend-legend">
+              <span><i class="trend-swatch" style="background:#16845b"></i><span data-i18n="dashboard.averageLatency">平均耗时</span></span>
+            </div>
+          </div>
+          <svg class="sparkline" id="latency-trend" viewBox="0 0 640 132" preserveAspectRatio="none" role="img" aria-label="Latency trend"></svg>
+        </article>
+      </div>
+      <div class="request-log">
+        <table>
+          <thead>
+            <tr>
+              <th data-i18n="dashboard.logTime">时间</th>
+              <th data-i18n="dashboard.logMethod">方法</th>
+              <th data-i18n="dashboard.logPath">路径</th>
+              <th data-i18n="dashboard.logStatus">状态</th>
+              <th data-i18n="dashboard.logLatency">耗时</th>
+              <th data-i18n="dashboard.logRequestId">请求 ID</th>
+            </tr>
+          </thead>
+          <tbody id="request-log-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head"><div class="section-title" data-i18n="dashboard.systemHealth">系统健康</div></div>
+    <div class="metric-grid runtime">
+      <article class="metric-card"><div class="metric-label" data-i18n="dashboard.processCpu">进程 CPU</div><div class="metric-value" id="system-cpu">—</div><div class="metric-sub" id="system-load">—</div></article>
+      <article class="metric-card"><div class="metric-label" data-i18n="dashboard.processMemory">进程内存</div><div class="metric-value" id="system-memory">—</div><div class="metric-sub" id="system-memory-percent">—</div></article>
+      <article class="metric-card"><div class="metric-label" data-i18n="dashboard.database">账户数据库</div><div class="metric-value" id="database-status">—</div><div class="metric-sub" id="database-mode">—</div></article>
+      <article class="metric-card"><div class="metric-label" data-i18n="dashboard.databaseLatency">数据库响应</div><div class="metric-value" id="database-latency">—</div><div class="metric-sub" id="database-size">—</div></article>
+      <article class="metric-card"><div class="metric-label" data-i18n="dashboard.dataDisk">数据盘</div><div class="metric-value" id="system-disk">—</div><div class="metric-sub" id="system-disk-free">—</div></article>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <div class="section-title" data-i18n="dashboard.accountDiagnosis">账号健康诊断</div>
+      <a class="section-note" href="/admin/account" data-i18n="dashboard.openAccountDetails">查看账户明细</a>
+    </div>
+    <div class="metric-grid runtime">
+      <article class="metric-card"><div class="metric-label" data-i18n="dashboard.healthHealthy">健康</div><div class="metric-value" id="health-healthy">—</div><div class="metric-sub" data-i18n="dashboard.healthHealthyHint">可正常调度，近期无失败</div></article>
+      <article class="metric-card"><div class="metric-label" data-i18n="dashboard.healthWarning">需观察</div><div class="metric-value" id="health-warning">—</div><div class="metric-sub" data-i18n="dashboard.healthWarningHint">曾失败、低健康度或冷却中</div></article>
+      <article class="metric-card"><div class="metric-label" data-i18n="dashboard.healthCritical">需处理</div><div class="metric-value" id="health-critical">—</div><div class="metric-sub" data-i18n="dashboard.healthCriticalHint">凭证过期或不可用</div></article>
+      <article class="metric-card"><div class="metric-label" data-i18n="dashboard.healthDisabled">已禁用</div><div class="metric-value" id="health-disabled">—</div><div class="metric-sub" data-i18n="dashboard.disabledHint">不参与调度</div></article>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head"><div class="section-title" data-i18n="dashboard.quota">可用配额</div></div>
+    <div class="quota-grid" id="quota-grid"><div class="empty-note">—</div></div>
+  </section>
+
+  <section class="section">
+    <div class="section-head"><div class="section-title" data-i18n="dashboard.pools">账号池分布</div></div>
+    <div class="pool-grid" id="pool-grid"></div>
+  </section>
+
+  <section class="section">
+    <div class="section-head"><div class="section-title" data-i18n="dashboard.quickActions">快速入口</div></div>
+    <div class="quick-grid">
+      <a class="quick-link" href="/admin/account"><span data-i18n="dashboard.manageAccounts">管理账号</span><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></a>
+      <a class="quick-link" href="/admin/config"><span data-i18n="dashboard.editConfig">调整配置</span><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></a>
+      <a class="quick-link" href="/admin/cache"><span data-i18n="dashboard.manageCache">查看缓存</span><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></a>
+    </div>
+  </section>
+</main>
+
+<script src="/static/js/i18n.js?v={{APP_VERSION}}"></script>
+<script src="/static/js/auth.js?v={{APP_VERSION}}"></script>
+<script src="/static/js/toast.js?v={{APP_VERSION}}"></script>
+<script src="/static/js/admin-header.js?v={{APP_VERSION}}"></script>
+<script src="/static/js/footer.js?v={{APP_VERSION}}"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const fmt = (value) => new Intl.NumberFormat().format(Number(value || 0));
+const fmtBytes = (value) => {
+  let size = Math.max(0, Number(value || 0));
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let unit = 0;
+  while (size >= 1024 && unit < units.length - 1) {
+    size /= 1024;
+    unit += 1;
+  }
+  return `${size >= 10 || unit === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[unit]}`;
+};
+const escapeHtml = (value) => String(value ?? '').replace(
+  /[&<>"']/g,
+  (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char],
+);
+const text = (key, fallback, params) => {
+  const value = typeof window.t === 'function' ? t(key, params) : key;
+  if (value !== key) return value;
+  return Object.entries(params || {}).reduce(
+    (result, [name, replacement]) => result.replaceAll(`{${name}}`, replacement),
+    fallback,
+  );
+};
+const set = (id, value) => { const node = $(id); if (node) node.textContent = value; };
+
+function duration(seconds) {
+  seconds = Math.max(0, Math.floor(Number(seconds || 0)));
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (days) return text('dashboard.durationDays', '{days}d {hours}h', { days, hours });
+  if (hours) return text('dashboard.durationHours', '{hours}h {minutes}m', { hours, minutes });
+  return text('dashboard.durationMinutes', '{minutes}m', { minutes });
+}
+
+function renderSparkline(id, history, primaryKey, color, secondaryKey, secondaryColor) {
+  const svg = $(id);
+  if (!svg) return;
+  const width = 640;
+  const height = 132;
+  const top = 8;
+  const bottom = 24;
+  const points = Array.isArray(history) && history.length ? history : [{ timestamp: Date.now() / 1000 }];
+  const primary = points.map((point) => Number(point[primaryKey] || 0));
+  const secondary = secondaryKey ? points.map((point) => Number(point[secondaryKey] || 0)) : [];
+  const maximum = Math.max(1, ...primary, ...secondary);
+  const x = (index) => points.length === 1 ? width / 2 : index * width / (points.length - 1);
+  const y = (value) => top + (height - top - bottom) * (1 - value / maximum);
+  const pathFor = (values) => values.map(
+    (value, index) => `${index ? 'L' : 'M'}${x(index).toFixed(1)},${y(value).toFixed(1)}`,
+  ).join(' ');
+  const primaryPath = pathFor(primary);
+  const secondaryPath = secondary.length ? pathFor(secondary) : '';
+  const gradientId = `${id}-gradient`;
+  const first = new Date(Number(points[0].timestamp || 0) * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const last = new Date(Number(points[points.length - 1].timestamp || 0) * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  svg.innerHTML = `
+    <defs><linearGradient id="${gradientId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${color}" stop-opacity=".20"/><stop offset="1" stop-color="${color}" stop-opacity="0"/></linearGradient></defs>
+    <path d="M0,${top}H${width}M0,${(height - bottom + top) / 2}H${width}M0,${height - bottom}H${width}" fill="none" stroke="#e8e3da" stroke-width="1" stroke-dasharray="4 5" vector-effect="non-scaling-stroke"/>
+    <path d="${primaryPath} L${width},${height - bottom} L0,${height - bottom} Z" fill="url(#${gradientId})"/>
+    <path d="${primaryPath}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+    ${secondaryPath ? `<path d="${secondaryPath}" fill="none" stroke="${secondaryColor}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>` : ''}
+    <text x="0" y="${height - 5}" fill="#a29c93" font-size="10">${first}</text>
+    <text x="${width}" y="${height - 5}" text-anchor="end" fill="#a29c93" font-size="10">${last}</text>
+  `;
+}
+
+function renderTrends(runtime) {
+  const history = Array.isArray(runtime.history) ? runtime.history : [];
+  const recentRequests = history.reduce((sum, point) => sum + Number(point.requests || 0), 0);
+  const recentErrors = history.reduce((sum, point) => sum + Number(point.errors || 0), 0);
+  const latencyTotal = history.reduce(
+    (sum, point) => sum + Number(point.average_latency_ms || 0) * Number(point.requests || 0),
+    0,
+  );
+  const recentLatency = recentRequests ? latencyTotal / recentRequests : 0;
+  set('request-trend-summary', text(
+    'dashboard.recentRequests',
+    '{requests} requests · {errors} errors · 30 min',
+    { requests: fmt(recentRequests), errors: fmt(recentErrors) },
+  ));
+  set('latency-trend-summary', text(
+    'dashboard.recentLatency',
+    '{latency} ms average · 30 min',
+    { latency: recentLatency.toFixed(1) },
+  ));
+  renderSparkline('request-trend', history, 'requests', '#2563eb', 'errors', '#dc5a52');
+  renderSparkline('latency-trend', history, 'average_latency_ms', '#16845b');
+}
+
+function renderRequestLog(runtime) {
+  const body = $('request-log-body');
+  if (!body) return;
+  const rows = Array.isArray(runtime.recent_requests) ? runtime.recent_requests : [];
+  body.innerHTML = rows.length
+    ? rows.map((row) => {
+      const status = Number(row.status || 0);
+      const statusClass = status >= 500 ? 'bad' : status >= 400 ? 'warn' : '';
+      return `<tr>
+        <td>${escapeHtml(new Date(Number(row.timestamp || 0) * 1000).toLocaleString())}</td>
+        <td>${escapeHtml(row.method)}</td>
+        <td class="request-log-path" title="${escapeHtml(row.path)}">${escapeHtml(row.path)}</td>
+        <td><span class="request-log-status ${statusClass}">${status}</span></td>
+        <td>${Number(row.latency_ms || 0).toFixed(1)} ms</td>
+        <td>${escapeHtml(row.request_id)}</td>
+      </tr>`;
+    }).join('')
+    : `<tr><td colspan="6" class="empty-note">${escapeHtml(text('dashboard.noRequestLogs', 'No persisted API requests yet'))}</td></tr>`;
+}
+
+function renderOverview(data) {
+  const accounts = data.accounts || {};
+  const status = accounts.status || {};
+  const healthBands = accounts.health_bands || {};
+  const runtime = data.runtime || {};
+  const system = data.system || {};
+  const database = data.database || {};
+  const health = ['ok', 'degraded', 'error'].includes(data.status) ? data.status : 'degraded';
+  const total = Number(accounts.total || 0);
+  const available = Number(accounts.available ?? status.active ?? 0);
+  const hero = $('status-hero');
+  if (hero) hero.dataset.status = health;
+  const statusKey = health === 'degraded' && total
+    ? 'dashboard.statusWaiting'
+    : `dashboard.status${health[0].toUpperCase()}${health.slice(1)}`;
+  set('status-text', text(statusKey, health));
+  set('hero-availability', `${fmt(available)} / ${fmt(total)}`);
+  const captionKey = health === 'ok'
+    ? 'dashboard.heroReady'
+    : health === 'error'
+      ? 'dashboard.heroBlocked'
+      : total
+        ? 'dashboard.heroWaiting'
+        : 'dashboard.heroEmpty';
+  set('hero-caption', text(
+    captionKey,
+    health === 'ok'
+      ? 'The account pool is ready for API traffic.'
+      : health === 'error'
+        ? 'Accounts exist, but none can currently be scheduled.'
+        : total
+          ? 'Accounts are cooling down and will return automatically.'
+          : 'Add an account to start serving API requests.',
+  ));
+  set('hero-version', data.version || '—');
+  set('hero-storage', runtime.storage || '—');
+  set('hero-error-rate', `${Number(runtime.error_rate || 0).toFixed(1)}%`);
+  set('accounts-total', fmt(accounts.total));
+  set('accounts-manageable', text(
+    'dashboard.availableAccounts',
+    '{count} currently available',
+    { count: fmt(available) },
+  ));
+  set('accounts-active', fmt(status.active));
+  set('accounts-health', text(
+    'dashboard.healthScore',
+    'Average health {value}%',
+    { value: Math.round(Number(accounts.average_health || 0) * 100) },
+  ));
+  set('accounts-cooling', fmt(status.cooling));
+  set('accounts-expired', fmt(status.expired));
+  set('accounts-disabled', fmt(status.disabled));
+  set('runtime-storage', runtime.storage || '—');
+  set('runtime-strategy', runtime.selection_strategy || '—');
+  set('runtime-revision', fmt(accounts.revision));
+  set('runtime-scheduler', runtime.scheduler_leader
+    ? text('dashboard.leader', 'Leader')
+    : text('dashboard.follower', 'Follower'));
+  set('runtime-requests', fmt(runtime.requests));
+  set('runtime-errors', `${runtime.error_rate || 0}% · 4xx ${fmt(runtime.client_errors)} · 5xx ${fmt(runtime.server_errors)}`);
+  set('runtime-active', fmt(runtime.active_requests));
+  set('runtime-inflight', fmt(accounts.inflight));
+  set('runtime-latency', `${Number(runtime.average_latency_ms || 0).toFixed(1)} ms`);
+  set('runtime-uptime', duration(runtime.uptime_seconds));
+  set('runtime-last', runtime.last_request_at
+    ? text(
+      'dashboard.lastRequest',
+      'Last {time}',
+      { time: new Date(runtime.last_request_at * 1000).toLocaleString() },
+    )
+    : text('dashboard.noRequests', 'No requests yet'));
+  set('runtime-scope', runtime.scope === 'persistent'
+    ? text(
+      'dashboard.historyPersistent',
+      'Persistent history · {days} day retention',
+      { days: fmt(runtime.retention_days || 7) },
+    )
+    : text('dashboard.historyProcess', 'Current process only'));
+  set('system-cpu', `${Number(system.process_cpu_percent || 0).toFixed(1)}%`);
+  set('system-load', text(
+    'dashboard.systemLoad',
+    '1 min load {load} · {cores} cores',
+    { load: Number(system.load_1m || 0).toFixed(2), cores: fmt(system.cpu_count) },
+  ));
+  set('system-memory', fmtBytes(system.memory_rss_bytes));
+  set('system-memory-percent', system.memory_percent == null
+    ? text('dashboard.memoryCurrent', 'Current RSS')
+    : text(
+      'dashboard.memoryPercent',
+      '{percent}% of physical memory',
+      { percent: Number(system.memory_percent).toFixed(1) },
+    ));
+  set('database-status', database.status === 'ok'
+    ? text('dashboard.databaseHealthy', 'Healthy')
+    : database.status === 'error'
+      ? text('dashboard.databaseError', 'Error')
+      : text('dashboard.databaseUnknown', 'Unknown'));
+  set('database-mode', [database.backend, database.journal_mode].filter(Boolean).join(' · ') || '—');
+  set('database-latency', `${Number(database.latency_ms || 0).toFixed(1)} ms`);
+  set('database-size', database.size_bytes == null
+    ? text('dashboard.databaseConnected', 'Connection check')
+    : text(
+      'dashboard.databaseSize',
+      '{size} including WAL',
+      { size: fmtBytes(database.size_bytes) },
+    ));
+  set('system-disk', `${Number(system.disk_percent || 0).toFixed(1)}%`);
+  set('system-disk-free', text(
+    'dashboard.diskFree',
+    '{size} free',
+    { size: fmtBytes(system.disk_free_bytes) },
+  ));
+  set('health-healthy', fmt(healthBands.healthy));
+  set('health-warning', fmt(healthBands.warning));
+  set('health-critical', fmt(healthBands.critical));
+  set('health-disabled', fmt(healthBands.disabled));
+  set('updated-at', text(
+    'dashboard.updatedAt',
+    'Updated {time}',
+    { time: new Date().toLocaleTimeString() },
+  ));
+  renderTrends(runtime);
+  renderRequestLog(runtime);
+
+  const quota = accounts.quota_remaining || {};
+  const authTypes = accounts.auth_types || {};
+  $('quota-grid').innerHTML = Number(authTypes.sso || 0) === 0 && Number(authTypes.oauth || 0) > 0
+    ? `<div class="empty-note">${escapeHtml(text(
+      'dashboard.oauthQuotaHint',
+      'OAuth accounts use subscription-period billing. View exact usage in Account Management.',
+    ))}</div>`
+    : ['auto','fast','expert','heavy','grok_4_3','console']
+      .map((name) => `<article class="quota-card"><div class="quota-name">${name.replace('_',' ')}</div><div class="quota-value">${fmt(quota[name])}</div></article>`)
+      .join('');
+
+  const pools = accounts.pools || {};
+  const poolTotal = Math.max(1, total);
+  $('pool-grid').innerHTML = ['basic','super','heavy'].map((name) => {
+    const count = Number(pools[name] || 0);
+    const width = Math.min(100, count * 100 / poolTotal);
+    return `<article class="pool-card"><div class="pool-row"><span class="pool-name">${name}</span><span class="pool-count">${fmt(count)}</span></div><div class="pool-track"><span class="pool-fill ${name}" style="width:${width}%"></span></div></article>`;
+  }).join('');
+}
+
+async function loadOverview() {
+  const button = $('refresh');
+  button?.classList.add('loading');
+  try {
+    const key = await adminKey.get();
+    const response = await fetch(`${ADMIN_API}/overview`, {
+      headers: { Authorization: `Bearer ${key}` },
+      cache: 'no-store',
+    });
+    if (response.status === 401 || response.status === 403) {
+      adminLogout();
+      return;
+    }
+    if (!response.ok) throw new Error(response.status);
+    renderOverview(await response.json());
+  } catch (error) {
+    showToast(`${text('dashboard.loadFailed', 'Dashboard failed to load')}: ${error.message}`, 'error');
+  } finally {
+    button?.classList.remove('loading');
+  }
+}
+
+(async () => {
+  await new Promise((resolve) => I18n.onReady(resolve));
+  document.title = text('dashboard.pageTitle', 'Grok2API - Dashboard');
+  await renderAdminHeader?.();
+  await renderSiteFooter?.();
+  const key = await adminKey.get();
+  if (!await keepAdminSession(`${ADMIN_API}/verify`, key)) {
+    location.href = '/admin/login';
+    return;
+  }
+  await loadOverview();
+  window.setInterval(() => {
+    if (document.visibilityState === 'visible') loadOverview();
+  }, 30000);
+})();
+</script>
+</body>
+</html>

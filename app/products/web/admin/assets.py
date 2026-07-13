@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from app.control.account.commands import ListAccountsQuery
 from app.control.account.invalid_credentials import mark_account_invalid_credentials
-from app.control.account.state_machine import is_manageable
+from app.control.account.state_machine import is_sso_maintainable
 from app.platform.errors import UpstreamError
 
 if TYPE_CHECKING:
@@ -49,7 +49,7 @@ async def _list_all_tokens(repo: "AccountRepository") -> list[str]:
     page_num, tokens = 1, []
     while True:
         page = await repo.list_accounts(ListAccountsQuery(page=page_num, page_size=2000))
-        tokens.extend(r.token for r in page.items if is_manageable(r))
+        tokens.extend(r.token for r in page.items if is_sso_maintainable(r))
         if page_num * 2000 >= page.total:
             break
         page_num += 1

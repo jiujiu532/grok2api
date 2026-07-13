@@ -8,9 +8,7 @@
 """
 
 import asyncio
-from typing import Any, AsyncGenerator
-
-import orjson
+from typing import AsyncGenerator
 
 from app.platform.logging.logger import logger
 from app.platform.config.snapshot import get_config
@@ -30,7 +28,6 @@ from app.dataplane.reverse.protocol.xai_console_chat import (
 from app.products._account_selection import reserve_account, selection_max_retries
 from app.products.openai.chat import _configured_retry_codes, _should_retry_upstream
 from ._format import (
-    make_resp_id,
     make_resp_object,
     build_resp_usage,
     format_sse,

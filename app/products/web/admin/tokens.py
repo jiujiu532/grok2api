@@ -17,7 +17,6 @@ from fastapi.responses import Response
 from pydantic import BaseModel, RootModel
 
 from app.platform.errors import AppError, ErrorKind, ValidationError
-from app.platform.config.snapshot import get_config
 from app.platform.logging.logger import logger
 from app.platform.runtime.clock import now_ms
 from app.control.account.commands import (
@@ -27,7 +26,7 @@ from app.control.account.commands import (
     ListAccountsQuery,
 )
 from app.control.account.enums import AccountStatus
-from app.control.account.state_machine import is_manageable
+from app.control.account.state_machine import is_sso_maintainable
 
 if TYPE_CHECKING:
     from app.control.account.refresh import AccountRefreshService
@@ -208,7 +207,14 @@ async def _list_invalid_tokens(repo: "AccountRepository") -> list[str]:
 @router.get("/tokens")
 async def list_tokens(repo: "AccountRepository" = Depends(get_repo)):
     """Return flat token list."""
-    return _json({"tokens": await _list_token_payloads(repo)})
+    tokens = await _list_token_payloads(repo)
+    for item in tokens:
+        if "oauth" in (item.get("tags") or []):
+            item["auth_type"] = "oauth"
+            # OAuth billing is percentage/time based; SSO A/F/E/H/C defaults
+            # are unrelated and must never be presented as OAuth allowance.
+            item["quota"] = {}
+    return _json({"tokens": tokens})
 
 
 @router.post("/tokens")
@@ -548,7 +554,11 @@ async def _enable_nsfw_imported(repo: "AccountRepository", tokens: list[str]) ->
 
     records = await repo.get_accounts(tokens)
     by_token = {r.token: r for r in records}
-    manageable_tokens = [token for token in tokens if (record := by_token.get(token)) and is_manageable(record)]
+    manageable_tokens = [
+        token
+        for token in tokens
+        if (record := by_token.get(token)) and is_sso_maintainable(record)
+    ]
     skipped_c = len(tokens) - len(manageable_tokens)
     if not manageable_tokens:
         logger.info("admin import auto nsfw skipped: token_count={} skipped_non_manageable={}", len(tokens), skipped_c)

@@ -31,8 +31,8 @@ class ChatCompletionRequest(BaseModel):
     messages:            list[MessageItem]
     stream:              bool | None                = None
     reasoning_effort:    str | None                 = None
-    temperature:         float | None               = 0.8
-    top_p:               float | None               = 0.95
+    temperature:         float | None               = Field(0.8, ge=0, le=2)
+    top_p:               float | None               = Field(0.95, ge=0, le=1)
     image_config:        ImageConfig | None         = None
     video_config:        VideoConfig | None         = None
     tools:               list[dict[str, Any]] | None = None
@@ -70,8 +70,8 @@ class ResponsesCreateRequest(BaseModel):
     instructions:         str | None           = None
     stream:               bool | None          = None
     reasoning:            dict[str, Any] | None = None
-    temperature:          float | None         = None
-    top_p:                float | None         = None
+    temperature:          float | None         = Field(None, ge=0, le=2)
+    top_p:                float | None         = Field(None, ge=0, le=1)
     # silently ignored
     max_output_tokens:    int | None            = None
     tools:                list[Any] | None      = None

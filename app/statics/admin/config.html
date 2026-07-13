@@ -1354,7 +1354,7 @@ function doReset() {
     await renderAdminHeader?.();
     await renderSiteFooter?.();
     const key = await adminKey.get();
-    if (!key || !await verifyKey(ADMIN_API + '/verify', key).catch(() => false))
+    if (!await keepAdminSession(ADMIN_API + '/verify', key))
       return location.href = '/admin/login';
     await load();
   } catch (e) {

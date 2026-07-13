@@ -11,7 +11,7 @@
 """
 
 import asyncio
-from typing import Any, AsyncGenerator
+from typing import AsyncGenerator
 
 import orjson
 
@@ -35,7 +35,6 @@ from app.products.openai.chat import _configured_retry_codes, _should_retry_upst
 from ._format import (
     make_response_id,
     make_stream_chunk,
-    make_thinking_chunk,
     make_chat_response,
     build_usage,
 )

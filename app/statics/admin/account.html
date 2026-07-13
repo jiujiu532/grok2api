@@ -403,6 +403,10 @@
       color:#b07a45;
       background:#fbf5ed;
     }
+    .table-card .badge-oauth {
+      color:#7c3aed;
+      background:#f5f0ff;
+    }
     .table-card .badge-active {
       color:#3e8f69;
       background:#f2f8f4;
@@ -566,6 +570,8 @@
     .q-b { background:#fdf2f7; color:#be3f7f }
     .q-c { background:#f0faf4; color:#2e7d52 }
     .q-z { background:#f6f6f6; color:#a0a0a6 }
+    .q-oauth-plan { background:#f5f0ff; color:#7c3aed }
+    .q-oauth-usage { background:#fff7ed; color:#c2410c }
 
     /* Token monospace */
     .tok { font-family:ui-monospace,monospace; font-size:12px; color:#333 }
@@ -730,6 +736,10 @@
       <div class="page-sub" data-i18n="account.pageSubtitle">管理 Grok2API 的 xAI 服务账户池。</div>
     </div>
     <div class="page-actions">
+      <button onclick="openOAuth()" class="page-action-btn page-action-btn-primary">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="15" r="4"/><path d="m11 12 8-8"/><path d="m15 4 5 5"/><path d="m13 10 2 2"/></svg>
+        <span data-i18n="account.oauthLogin">OAuth 登录</span>
+      </button>
       <button onclick="openImport()" class="page-action-btn">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
         <span data-i18n="account.actionImportShort">导入</span>
@@ -805,7 +815,7 @@
       </div>
       <div class="stat-num" id="s-calls" style="color:#111">0</div>
     </div>
-    <div class="stat-cell" data-quota-only>
+    <div class="stat-cell" data-quota-only data-quota-card="auto">
       <div class="stat-top">
         <div class="stat-label" data-i18n="account.statAuto">Auto 余额</div>
         <span class="stat-icon" style="color:#2563eb">
@@ -814,7 +824,7 @@
       </div>
       <div class="stat-num" id="s-qa" style="color:#2563eb">0</div>
     </div>
-    <div class="stat-cell" data-quota-only>
+    <div class="stat-cell" data-quota-only data-quota-card="fast">
       <div class="stat-top">
         <div class="stat-label" data-i18n="account.statFast">Fast 余额</div>
         <span class="stat-icon" style="color:#16a34a">
@@ -823,7 +833,7 @@
       </div>
       <div class="stat-num" id="s-qf" style="color:#16a34a">0</div>
     </div>
-    <div class="stat-cell" data-quota-only>
+    <div class="stat-cell" data-quota-only data-quota-card="expert">
       <div class="stat-top">
         <div class="stat-label" data-i18n="account.statExpert">Expert 余额</div>
         <span class="stat-icon" style="color:#7c3aed">
@@ -832,7 +842,7 @@
       </div>
       <div class="stat-num" id="s-qe" style="color:#7c3aed">0</div>
     </div>
-    <div class="stat-cell" data-quota-only>
+    <div class="stat-cell" data-quota-only data-quota-card="heavy">
       <div class="stat-top">
         <div class="stat-label" data-i18n="account.statHeavy">Heavy 余额</div>
         <span class="stat-icon" style="color:#b0632a">
@@ -841,7 +851,7 @@
       </div>
       <div class="stat-num" id="s-qh" style="color:#b0632a">0</div>
     </div>
-    <div class="stat-cell" data-quota-only>
+    <div class="stat-cell" data-quota-only data-quota-card="console">
       <div class="stat-top">
         <div class="stat-label" data-i18n="account.statConsole">Console 余额</div>
         <span class="stat-icon" style="color:#2e7d52">
@@ -907,6 +917,27 @@
             <div class="filter-group" id="pool-filter-group">
               <span class="filter-label" data-i18n="account.filterTypeLabel">类型</span>
               <div class="filter-chip-list" id="pool-filter-chips"></div>
+            </div>
+            <div class="filter-group">
+              <span class="filter-label" data-i18n="account.filterHealthLabel">健康</span>
+              <div class="filter-chip-list">
+                <button type="button" class="filter-chip active" data-health="all" onclick="switchHealth('all')">
+                  <span data-i18n="account.filterHealthAll">全部</span>
+                  <span class="filter-chip-count" id="fc-health-all">0</span>
+                </button>
+                <button type="button" class="filter-chip" data-health="healthy" onclick="switchHealth('healthy')">
+                  <span data-i18n="account.filterHealthHealthy">健康</span>
+                  <span class="filter-chip-count is-green" id="fc-health-healthy">0</span>
+                </button>
+                <button type="button" class="filter-chip" data-health="warning" onclick="switchHealth('warning')">
+                  <span data-i18n="account.filterHealthWarning">需观察</span>
+                  <span class="filter-chip-count is-orange" id="fc-health-warning">0</span>
+                </button>
+                <button type="button" class="filter-chip" data-health="critical" onclick="switchHealth('critical')">
+                  <span data-i18n="account.filterHealthCritical">需处理</span>
+                  <span class="filter-chip-count is-red" id="fc-health-critical">0</span>
+                </button>
+              </div>
             </div>
             <div class="filter-group">
               <span class="filter-label" data-i18n="account.filterNsfwLabel">NSFW</span>
@@ -988,6 +1019,7 @@
           <th style="width:200px" data-i18n="account.colToken">Token</th>
           <th class="table-center" style="width:70px" data-i18n="account.colType">类型</th>
           <th class="table-center" style="width:70px" data-i18n="account.colStatus">状态</th>
+          <th class="table-center" style="width:80px" data-i18n="account.colHealth">健康</th>
           <th data-quota-only>
             <span data-i18n="account.colQuota">额度</span>
             <span style="margin-left:6px;display:inline-flex;align-items:center;gap:3px;vertical-align:middle">
@@ -1071,6 +1103,27 @@
   </div>
 </div>
 
+<!-- ── OAuth Modal ────────────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="modal-oauth">
+  <div class="modal">
+    <div class="modal-title" data-i18n="account.oauthTitle">使用 Grok OAuth 登录</div>
+    <div class="dialog-body">
+      <div class="dialog-help" id="oauth-status" data-i18n="account.oauthStarting">正在创建登录会话…</div>
+      <div id="oauth-ready" style="display:none">
+        <div class="dialog-field">
+          <span class="dialog-label" data-i18n="account.oauthCode">验证码</span>
+          <code id="oauth-code" style="font-size:18px;font-weight:700;letter-spacing:.08em"></code>
+        </div>
+        <div class="dialog-help" style="margin-top:10px" data-i18n="account.oauthHint">在新页面完成登录与授权，本页面会自动导入账户。</div>
+      </div>
+    </div>
+    <div class="dialog-actions">
+      <button onclick="closeModal('modal-oauth')" class="dialog-btn" data-i18n="account.cancel">取消</button>
+      <a id="oauth-open" class="dialog-btn dialog-btn-primary" target="_blank" rel="noopener" style="display:none;text-decoration:none" data-i18n="account.oauthOpen">打开登录页面</a>
+    </div>
+  </div>
+</div>
+
 <!-- ── Edit Modal ─────────────────────────────────────────────────────────── -->
 <div class="modal-overlay" id="modal-edit">
   <div class="modal">
@@ -1126,7 +1179,7 @@
 const PAGE_SIZE_KEY = 'admin.account.page_size';
 const PAGE_SIZE_OPTIONS = [50, 100, 200, 500, 1000, 2000];
 
-let allTokens = [], curStatus = 'all', curNsfw = 'all', curPool = 'all', curPage = 1, pageSize = loadSavedPageSize();
+let allTokens = [], curStatus = 'all', curNsfw = 'all', curPool = 'all', curHealth = 'all', curPage = 1, pageSize = loadSavedPageSize();
 const sel = new Set();
 const refreshingTokens = new Set();
 let _cb = null;
@@ -1135,6 +1188,8 @@ let _filterMenuBound = false;
 let _tokenViewVersion = 0;
 let _tokenViewCacheKey = '';
 let _tokenViewCache = null;
+let _oauthSession = '';
+let _oauthPollTimer = null;
 
 function invalidateTokenView() {
   _tokenViewVersion += 1;
@@ -1192,7 +1247,7 @@ function waitI18n() {
   await renderSiteFooter?.();
   initFilterMenu();
   const key = await adminKey.get();
-  if (!key || !await verifyKey(ADMIN_API + '/verify', key).catch(() => false))
+  if (!await keepAdminSession(ADMIN_API + '/verify', key))
     return location.href = '/admin/login';
   load();
 })();
@@ -1216,17 +1271,25 @@ let selectionStrategy = 'quota';
 // ── Load ───────────────────────────────────────────────────────────────────
 async function load() {
   try {
-    const [data, status] = await Promise.all([
+    const [data, status, oauthMetadata] = await Promise.all([
       _api('GET', '/tokens'),
       _api('GET', '/status').catch(() => null),
+      _api('GET', '/oauth/accounts/metadata').catch(() => ({ accounts: [] })),
     ]);
     if (status && typeof status.selection_strategy === 'string') {
       selectionStrategy = status.selection_strategy;
     }
-    allTokens = Array.isArray(data.tokens)
+    const metadataByAccount = new Map(
+      (oauthMetadata.accounts || []).map(item => [item.account_id, item])
+    );
+    const tokens = Array.isArray(data.tokens)
       ? data.tokens
       : Object.entries(data.tokens || {}).flatMap(([pool, items]) =>
           Array.isArray(items) ? items.map(t => ({ ...t, pool: t.pool || pool })) : []);
+    allTokens = tokens.map(token => ({
+      ...token,
+      ...(metadataByAccount.get(token.token) || {}),
+    }));
     applyStrategyUI();
     invalidateTokenView();
     render();
@@ -1255,7 +1318,7 @@ function render() {
 }
 
 function getTokenView() {
-  const cacheKey = `${_tokenViewVersion}|${curStatus}|${curNsfw}|${curPool}`;
+  const cacheKey = `${_tokenViewVersion}|${curStatus}|${curNsfw}|${curPool}|${curHealth}`;
   if (_tokenViewCache && _tokenViewCacheKey === cacheKey) return _tokenViewCache;
 
   const stats = {
@@ -1271,23 +1334,33 @@ function getTokenView() {
     qe: 0,
     qh: 0,
     qc: 0,
+    sso: 0,
+    oauth: 0,
+    oauthPlans: new Set(),
+    oauthUsage: [],
+    oauthPeriodEnds: [],
+    oauthModels: new Set(),
   };
   const statusCounts = { all: 0, active: 0, cooling: 0, invalid: 0, disabled: 0 };
+  const healthCounts = { all: 0, healthy: 0, warning: 0, critical: 0 };
   const nsfwCounts = { all: 0, enabled: 0, disabled: 0 };
   const poolCounts = new Map([['all', 0]]);
   const poolsSet = new Set(['basic', 'super', 'heavy']);
   const filteredItems = [];
 
   for (const token of allTokens) {
-    const pool = token.pool || 'basic';
+    const isOauth = token.auth_type === 'oauth' || (token.tags || []).includes('oauth');
+    const pool = isOauth ? 'oauth' : (token.pool || 'basic');
     const quota = token.quota || {};
     const nsfwEnabled = (token.tags || []).includes('nsfw');
     const invalid = isInvalidStatus(token.status);
     const disabled = isDisabledStatus(token.status);
+    const health = accountHealth(token);
     const matchesPool = curPool === 'all' || pool === curPool;
     const matchesStatus = curStatus === 'all'
       || (curStatus === 'invalid' ? invalid : curStatus === 'disabled' ? disabled : token.status === curStatus);
     const matchesNsfw = curNsfw === 'all' || (curNsfw === 'enabled' ? nsfwEnabled : !nsfwEnabled);
+    const matchesHealth = curHealth === 'all' || health === curHealth;
 
     poolsSet.add(pool);
     const successCount = token.use_count || 0;
@@ -1295,18 +1368,33 @@ function getTokenView() {
     stats.success += successCount;
     stats.fail += failCount;
     stats.calls += successCount + failCount;
-    stats.qa += quota.auto?.remaining || 0;
-    stats.qf += quota.fast?.remaining || 0;
-    stats.qe += quota.expert?.remaining || 0;
-    stats.qh += quota.heavy?.remaining || 0;
-    stats.qc += quota.console?.remaining || 0;
+    if (!isOauth) {
+      stats.sso += 1;
+      stats.qa += quota.auto?.remaining || 0;
+      stats.qf += quota.fast?.remaining || 0;
+      stats.qe += quota.expert?.remaining || 0;
+      stats.qh += quota.heavy?.remaining || 0;
+      stats.qc += quota.console?.remaining || 0;
+    } else {
+      stats.oauth += 1;
+      const plan = token.oauth_plan || token.oauth_plan_raw;
+      if (plan) stats.oauthPlans.add(plan);
+      const usage = Number(token.oauth_usage_percent);
+      if (Number.isFinite(usage)) stats.oauthUsage.push(Math.max(0, Math.min(100, usage)));
+      if (token.oauth_period_end && !Number.isNaN(new Date(token.oauth_period_end).getTime())) {
+        stats.oauthPeriodEnds.push(token.oauth_period_end);
+      }
+      for (const model of token.oauth_language_models || token.oauth_build_models || []) {
+        stats.oauthModels.add(model);
+      }
+    }
 
     if (token.status === 'active') stats.active += 1;
     if (token.status === 'cooling') stats.cooling += 1;
     if (invalid) stats.invalid += 1;
     if (disabled) stats.disabled += 1;
 
-    if (matchesPool && matchesNsfw) {
+    if (matchesPool && matchesNsfw && matchesHealth) {
       statusCounts.all += 1;
       if (token.status === 'active') statusCounts.active += 1;
       if (token.status === 'cooling') statusCounts.cooling += 1;
@@ -1314,18 +1402,23 @@ function getTokenView() {
       if (disabled) statusCounts.disabled += 1;
     }
 
-    if (matchesPool && matchesStatus) {
+    if (matchesPool && matchesStatus && matchesHealth) {
       nsfwCounts.all += 1;
       if (nsfwEnabled) nsfwCounts.enabled += 1;
       else nsfwCounts.disabled += 1;
     }
 
-    if (matchesStatus && matchesNsfw) {
+    if (matchesStatus && matchesNsfw && matchesHealth) {
       poolCounts.set('all', poolCounts.get('all') + 1);
       poolCounts.set(pool, (poolCounts.get(pool) || 0) + 1);
     }
 
-    if (matchesPool && matchesStatus && matchesNsfw) filteredItems.push(token);
+    if (matchesPool && matchesStatus && matchesNsfw) {
+      healthCounts.all += 1;
+      if (healthCounts[health] != null) healthCounts[health] += 1;
+    }
+
+    if (matchesPool && matchesStatus && matchesNsfw && matchesHealth) filteredItems.push(token);
   }
 
   if (curPool !== 'all' && !poolsSet.has(curPool)) {
@@ -1333,10 +1426,11 @@ function getTokenView() {
     return getTokenView();
   }
 
-  _tokenViewCacheKey = `${_tokenViewVersion}|${curStatus}|${curNsfw}|${curPool}`;
+  _tokenViewCacheKey = `${_tokenViewVersion}|${curStatus}|${curNsfw}|${curPool}|${curHealth}`;
   _tokenViewCache = {
     stats,
     statusCounts,
+    healthCounts,
     nsfwCounts,
     poolCounts,
     pools: Array.from(poolsSet),
@@ -1361,6 +1455,13 @@ function isManageableStatus(status) {
   return status === 'active' || status === 'cooling';
 }
 
+function accountHealth(token) {
+  if (isDisabledStatus(token.status)) return 'disabled';
+  if (isInvalidStatus(token.status)) return 'critical';
+  if (token.status === 'cooling' || Number(token.fail_count || 0) > 0) return 'warning';
+  return 'healthy';
+}
+
 function renderStats(view = getTokenView()) {
   const { stats } = view;
   $('s-total',   allTokens.length);
@@ -1371,11 +1472,38 @@ function renderStats(view = getTokenView()) {
   $('s-calls', fmt(stats.calls));
   $('s-success', fmt(stats.success));
   $('s-rate', fmtRate(stats.success, stats.fail));
-  $('s-qa', fmt(stats.qa)); $('s-qf', fmt(stats.qf)); $('s-qe', fmt(stats.qe)); $('s-qh', fmt(stats.qh)); $('s-qc', fmt(stats.qc));
+  if (!stats.sso && stats.oauth) {
+    const used = stats.oauthUsage.length ? Math.max(...stats.oauthUsage) : null;
+    const resetAt = stats.oauthPeriodEnds.length
+      ? stats.oauthPeriodEnds.reduce((a, b) => new Date(a) <= new Date(b) ? a : b)
+      : null;
+    const plans = Array.from(stats.oauthPlans);
+    setQuotaCard('auto', tr('account.oauthPlan', null, '订阅计划'), plans.join(' / ') || 'OAuth');
+    setQuotaCard('fast', tr('account.oauthPeriodUsed', null, '周期已用'), used == null ? tr('account.na', null, '—') : `${fmtPercent(used)}%`);
+    setQuotaCard('expert', tr('account.oauthPeriodRemaining', null, '周期剩余'), used == null ? tr('account.na', null, '—') : `${fmtPercent(100 - used)}%`);
+    setQuotaCard('heavy', tr('account.oauthPeriodReset', null, '重置时间'), resetAt ? fmtResetDate(resetAt) : tr('account.na', null, '—'));
+    setQuotaCard('console', tr('account.oauthLanguageModels', null, '语言模型'), stats.oauthModels.size || tr('account.na', null, '—'));
+  } else {
+    setQuotaCard('auto', tr('account.statAuto', null, 'Auto 余额'), fmt(stats.qa));
+    setQuotaCard('fast', tr('account.statFast', null, 'Fast 余额'), fmt(stats.qf));
+    setQuotaCard('expert', tr('account.statExpert', null, 'Expert 余额'), fmt(stats.qe));
+    setQuotaCard('heavy', tr('account.statHeavy', null, 'Heavy 余额'), fmt(stats.qh));
+    setQuotaCard('console', tr('account.statConsole', null, 'Console 余额'), fmt(stats.qc));
+  }
+}
+
+function setQuotaCard(mode, label, value) {
+  const card = document.querySelector(`[data-quota-card="${mode}"]`);
+  if (!card) return;
+  const labelEl = card.querySelector('.stat-label');
+  const valueEl = card.querySelector('.stat-num');
+  if (labelEl) labelEl.textContent = label;
+  if (valueEl) valueEl.textContent = value;
 }
 
 function renderFilters(view = getTokenView()) {
   renderStatusFilters(view);
+  renderHealthFilters(view);
   renderNsfwFilters(view);
   renderPoolFilters(view);
   syncFilterTrigger();
@@ -1417,8 +1545,16 @@ function syncFilterTrigger() {
   const menu = document.getElementById('filter-menu');
   const trigger = document.getElementById('btn-filter');
   if (!menu || !trigger) return;
-  const active = curStatus !== 'all' || curPool !== 'all' || curNsfw !== 'all' || menu.classList.contains('open');
+  const active = curStatus !== 'all' || curPool !== 'all' || curNsfw !== 'all' || curHealth !== 'all' || menu.classList.contains('open');
   trigger.classList.toggle('is-active', active);
+}
+
+function renderHealthFilters(view = getTokenView()) {
+  setFilterCount('fc-health-all', view.healthCounts.all);
+  setFilterCount('fc-health-healthy', view.healthCounts.healthy);
+  setFilterCount('fc-health-warning', view.healthCounts.warning);
+  setFilterCount('fc-health-critical', view.healthCounts.critical);
+  document.querySelectorAll('[data-health]').forEach(el => el.classList.toggle('active', el.dataset.health === curHealth));
 }
 
 function renderStatusFilters(view = getTokenView()) {
@@ -1473,6 +1609,11 @@ function applyNsfwFilter(items, mode = curNsfw) {
   return items.filter(t => !(t.tags || []).includes('nsfw'));
 }
 
+function applyHealthFilter(items, health = curHealth) {
+  if (health === 'all') return items;
+  return items.filter(t => accountHealth(t) === health);
+}
+
 function filtered() {
   return getTokenView().filteredItems;
 }
@@ -1492,7 +1633,7 @@ function renderTable(view = getTokenView()) {
 
   document.getElementById('tbody').innerHTML = slice.length
     ? slice.map(rowHtml).join('')
-    : `<tr><td colspan="10" class="empty-state">${tr('account.empty', null, '暂无 Token，请点击右上角导入或添加。')}</td></tr>`;
+    : `<tr><td colspan="11" class="empty-state">${tr('account.empty', null, '暂无 Token，请点击右上角导入或添加。')}</td></tr>`;
 
   $('pagi-page', tr('account.pageIndicator', { current: total ? curPage : 0, total: pages }, `第 ${total ? curPage : 0} / ${pages} 页`));
   $('section-table-count', total);
@@ -1503,13 +1644,14 @@ function renderTable(view = getTokenView()) {
 
 function rowHtml(t) {
   const q      = t.quota || {};
+  const isOauth = t.auth_type === 'oauth' || (t.tags || []).includes('oauth');
   const isNsfw = (t.tags || []).includes('nsfw');
   const isDisabled = t.status === 'disabled';
-  const canManageNsfw = isManageableStatus(t.status);
+  const canManageNsfw = !isOauth && isManageableStatus(t.status);
   const isRefreshing = refreshingTokens.has(t.token);
   const success = t.use_count || 0;
   const fail = t.fail_count || 0;
-  const nsfwBtn = isNsfw
+  const nsfwBtn = isOauth ? '' : isNsfw
     ? `<button type="button" class="row-nsfw-btn is-on" ${canManageNsfw ? `data-nsfw-token="${xe(t.token)}" data-nsfw-enabled="false"` : 'disabled'} data-tip="${xe(canManageNsfw ? tr('account.batchNsfwDisable', null, '关闭 NSFW') : tr('account.rowActionNotSupported', null, '当前状态不支持此操作'))}" aria-label="${xe(canManageNsfw ? tr('account.batchNsfwDisable', null, '关闭 NSFW') : tr('account.rowActionNotSupported', null, '当前状态不支持此操作'))}">
         <svg viewBox="0 0 20 20" aria-hidden="true">
           <circle cx="10" cy="10" r="7.25"/>
@@ -1523,6 +1665,14 @@ function rowHtml(t) {
           <path d="M14.8 5.2 5.2 14.8"/>
         </svg>
       </button>`;
+  const refreshBtn = isOauth ? '' : `
+      <button onclick="refreshOne('${xe(t.token)}')" class="row-icon-btn${isRefreshing ? ' is-loading' : ''}" data-tip="${xe(isRefreshing ? tr('account.refreshing', { n: 1 }, '正在刷新 1 个账户…') : tr('account.actionRefresh', null, '刷新 Usage'))}" aria-label="${xe(tr('account.actionRefresh', null, '刷新 Usage'))}">
+        <svg viewBox="0 0 24 24" stroke-width="1.8"><path d="M20 11a8 8 0 0 0-14.6-4.6"/><path d="M4 4v5h5"/><path d="M4 13a8 8 0 0 0 14.6 4.6"/><path d="M20 20v-5h-5"/></svg>
+      </button>`;
+  const editBtn = isOauth ? '' : `
+      <button onclick="openEdit('${xe(t.token)}')" class="row-icon-btn" data-tip="${xe(tr('account.actionEdit', null, '编辑'))}" aria-label="${xe(tr('account.actionEdit', null, '编辑'))}">
+        <svg viewBox="0 0 24 24" stroke-width="1.8"><path d="m4 20 4.5-1 9.5-9.5-3.5-3.5L5 15.5z"/><path d="m13.5 5.5 3.5 3.5"/></svg>
+      </button>`;
   return `<tr>
     <td><input type="checkbox" class="cb row-cb" data-token="${xe(t.token)}" ${sel.has(t.token)?'checked':''} onchange="toggleRow(this)"></td>
     <td><div class="token-stack">
@@ -1531,9 +1681,10 @@ function rowHtml(t) {
           <svg viewBox="0 0 24 24" stroke-width="1.8"><rect x="9" y="9" width="10" height="10" rx="2"/><path d="M7 15H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v1"/></svg>
         </button>
       </div></td>
-    <td class="table-center"><span class="badge badge-${t.pool||'basic'}">${xe(poolLabel(t.pool || 'basic'))}</span></td>
+    <td class="table-center"><span class="badge badge-${isOauth ? 'oauth' : (t.pool||'basic')}">${xe(isOauth ? tr('account.pool.oauth', null, 'OAuth') : poolLabel(t.pool || 'basic'))}</span></td>
     <td class="table-center">${statusBadge(t.status)}</td>
-    <td data-quota-only><div class="quota-cell">${qpills(q)}</div></td>
+    <td class="table-center">${healthBadge(t)}</td>
+    <td data-quota-only><div class="quota-cell">${isOauth ? oauthQuotaHtml(t) : qpills(q)}</div></td>
     <td class="table-center" style="font-variant-numeric:tabular-nums;color:#8f8f8f">${success}</td>
     <td class="table-center" style="font-variant-numeric:tabular-nums;color:#9a9a9a">${fail}</td>
     <td class="table-center" style="font-variant-numeric:tabular-nums;color:#9a9a9a">${fmtRate(success, fail)}</td>
@@ -1545,12 +1696,8 @@ function rowHtml(t) {
           ? '<svg viewBox="0 0 24 24" stroke-width="1.8"><path d="M3 12a9 9 0 1 0 3-6.708"/><path d="M3 4v5h5"/></svg>'
           : '<svg viewBox="0 0 24 24" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><path d="M8.5 8.5 15.5 15.5"/></svg>'}
       </button>
-      <button onclick="refreshOne('${xe(t.token)}')" class="row-icon-btn${isRefreshing ? ' is-loading' : ''}" data-tip="${xe(isRefreshing ? tr('account.refreshing', { n: 1 }, '正在刷新 1 个账户…') : tr('account.actionRefresh', null, '刷新 Usage'))}" aria-label="${xe(tr('account.actionRefresh', null, '刷新 Usage'))}">
-        <svg viewBox="0 0 24 24" stroke-width="1.8"><path d="M20 11a8 8 0 0 0-14.6-4.6"/><path d="M4 4v5h5"/><path d="M4 13a8 8 0 0 0 14.6 4.6"/><path d="M20 20v-5h-5"/></svg>
-      </button>
-      <button onclick="openEdit('${xe(t.token)}')" class="row-icon-btn" data-tip="${xe(tr('account.actionEdit', null, '编辑'))}" aria-label="${xe(tr('account.actionEdit', null, '编辑'))}">
-        <svg viewBox="0 0 24 24" stroke-width="1.8"><path d="m4 20 4.5-1 9.5-9.5-3.5-3.5L5 15.5z"/><path d="m13.5 5.5 3.5 3.5"/></svg>
-      </button>
+      ${refreshBtn}
+      ${editBtn}
       <button onclick="doDelete(['${xe(t.token)}'])" class="row-icon-btn row-icon-danger" data-tip="${xe(tr('account.actionDelete', null, '删除'))}" aria-label="${xe(tr('account.actionDelete', null, '删除'))}">
         <svg viewBox="0 0 24 24" stroke-width="1.8"><path d="M5 7h14"/><path d="M9 7V4h6v3"/><path d="M8 10v7"/><path d="M12 10v7"/><path d="M16 10v7"/><path d="M7 7l1 13h8l1-13"/></svg>
         </button>
@@ -1578,6 +1725,22 @@ function qpills(q) {
   }).join('');
 }
 
+function oauthQuotaHtml(t) {
+  const plan = t.oauth_plan || t.oauth_plan_raw || tr('account.pool.oauth', null, 'OAuth');
+  const rawUsage = Number(t.oauth_usage_percent);
+  const hasUsage = Number.isFinite(rawUsage);
+  const usage = hasUsage ? Math.max(0, Math.min(100, rawUsage)) : null;
+  const periodEnd = t.oauth_period_end ? fmtDate(t.oauth_period_end) : '';
+  const usageLabel = hasUsage
+    ? tr('account.oauthUsageUsed', { n: usage.toFixed(1).replace(/\.0$/, '') }, `已用 ${usage.toFixed(1).replace(/\.0$/, '')}%`)
+    : tr('account.oauthUsageUnknown', null, '额度未同步');
+  const tip = `${plan} · ${usageLabel}${periodEnd ? ` · ${tr('account.oauthResetsAt', { time: periodEnd }, `${periodEnd} 重置`)}` : ''}`;
+  return [
+    `<span class="q-pill q-oauth-plan" data-tip="${xe(tip)}">${xe(plan)}</span>`,
+    `<span class="q-pill ${hasUsage ? 'q-oauth-usage' : 'q-z'}" data-tip="${xe(tip)}">${xe(usageLabel)}</span>`,
+  ].join('');
+}
+
 // ── Nav & Pagination ────────────────────────────────────────────────────────
 function switchStatus(status) {
   preserveScroll(() => {
@@ -1600,6 +1763,15 @@ function switchNsfw(mode) {
 function switchPool(pool) {
   preserveScroll(() => {
     curPool = pool || 'all';
+    curPage = 1;
+    sel.clear();
+    renderFilters();
+    renderTable();
+  });
+}
+function switchHealth(health) {
+  preserveScroll(() => {
+    curHealth = health || 'all';
     curPage = 1;
     sel.clear();
     renderFilters();
@@ -1644,6 +1816,12 @@ function updateBatchBtns() {
 // ── Helpers ────────────────────────────────────────────────────────────────
 function $(id, v) { const el = document.getElementById(id); if (el) el.textContent = v; }
 function fmt(n) { return n >= 10000 ? (n/1000).toFixed(1)+'k' : n; }
+function fmtPercent(n) { return Number(n).toFixed(1).replace(/\.0$/, ''); }
+function fmtResetDate(value) {
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return tr('account.na', null, '—');
+  return dt.toLocaleDateString(I18n.getLang() === 'en' ? 'en-US' : 'zh-CN', { month:'2-digit', day:'2-digit' });
+}
 function loadSavedPageSize() {
   const raw = Number(localStorage.getItem(PAGE_SIZE_KEY) || 0);
   return PAGE_SIZE_OPTIONS.includes(raw) ? raw : 50;
@@ -1671,6 +1849,17 @@ function statusBadge(s) {
     invalid:['badge-invalid', tr('account.status.invalid', null, '异常')],
   };
   const [cls, label] = m[s] || ['badge-invalid', s || tr('account.unknown', null, '未知')];
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+function healthBadge(token) {
+  const health = accountHealth(token);
+  const labels = {
+    healthy: ['badge-active', tr('account.health.healthy', null, '健康')],
+    warning: ['badge-cooling', tr('account.health.warning', null, '需观察')],
+    critical: ['badge-expired', tr('account.health.critical', null, '需处理')],
+    disabled: ['badge-disabled', tr('account.health.disabled', null, '已禁用')],
+  };
+  const [cls, label] = labels[health];
   return `<span class="badge ${cls}">${label}</span>`;
 }
 async function copy(t) {
@@ -1707,6 +1896,60 @@ function openImport() {
   updateImportFileState();
   fillImportPoolOptions('import-file-pool');
   openModal('modal-import-file');
+}
+
+async function openOAuth() {
+  clearTimeout(_oauthPollTimer);
+  _oauthSession = '';
+  document.getElementById('oauth-ready').style.display = 'none';
+  document.getElementById('oauth-open').style.display = 'none';
+  document.getElementById('oauth-status').textContent = tr('account.oauthStarting', null, '正在创建登录会话…');
+  openModal('modal-oauth');
+  try {
+    const data = await _api('POST', '/oauth/device/start');
+    _oauthSession = data.session_id;
+    document.getElementById('oauth-code').textContent = data.user_code || '';
+    document.getElementById('oauth-ready').style.display = '';
+    const link = document.getElementById('oauth-open');
+    link.href = data.verification_uri_complete || data.verification_uri;
+    link.style.display = '';
+    document.getElementById('oauth-status').textContent = tr('account.oauthWaiting', null, '等待你在 xAI 页面完成授权…');
+    window.open(link.href, '_blank', 'noopener');
+    scheduleOAuthPoll((data.interval || 5) * 1000);
+  } catch (e) {
+    document.getElementById('oauth-status').textContent = `${tr('account.oauthFailed', null, 'OAuth 登录失败')}: ${e.message}`;
+  }
+}
+
+function scheduleOAuthPoll(delay) {
+  clearTimeout(_oauthPollTimer);
+  _oauthPollTimer = setTimeout(pollOAuth, Math.max(1000, delay || 5000));
+}
+
+async function pollOAuth() {
+  if (!_oauthSession || !document.getElementById('modal-oauth').classList.contains('open')) return;
+  try {
+    const data = await _api('GET', `/oauth/device/${encodeURIComponent(_oauthSession)}`);
+    if (data.status === 'pending') {
+      scheduleOAuthPoll((data.interval || 5) * 1000);
+      return;
+    }
+    if (data.status === 'success') {
+      _oauthSession = '';
+      document.getElementById('oauth-status').textContent = tr('account.oauthSuccess', null, '登录成功，账户已导入。');
+      showToast(tr('account.oauthSuccess', null, '登录成功，账户已导入。'), 'success');
+      await load();
+      setTimeout(() => closeModal('modal-oauth'), 700);
+      return;
+    }
+    _oauthSession = '';
+    document.getElementById('oauth-status').textContent = data.status === 'denied'
+      ? tr('account.oauthDenied', null, '你取消了授权。')
+      : tr('account.oauthExpired', null, '登录会话已过期，请重新开始。');
+  } catch (e) {
+    _oauthSession = '';
+    document.getElementById('oauth-status').textContent = `${tr('account.oauthFailed', null, 'OAuth 登录失败')}: ${e.message}`;
+  }
 }
 
 function openEdit(token) {
@@ -2101,13 +2344,13 @@ async function batchRefreshSel() {
 
 function manageableTokens() {
   return allTokens
-    .filter(t => isManageableStatus(t.status))
+    .filter(t => isManageableStatus(t.status) && t.auth_type !== 'oauth' && !(t.tags || []).includes('oauth'))
     .map(t => t.token);
 }
 
 function selectedManageableTokens() {
   return allTokens
-    .filter(t => sel.has(t.token) && isManageableStatus(t.status))
+    .filter(t => sel.has(t.token) && isManageableStatus(t.status) && t.auth_type !== 'oauth' && !(t.tags || []).includes('oauth'))
     .map(t => t.token);
 }
 
@@ -2174,7 +2417,13 @@ function batchNSFWAll() {
 
 // ── Modal ──────────────────────────────────────────────────────────────────
 function openModal(id)  { document.getElementById(id).classList.add('open'); }
-function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+  if (id === 'modal-oauth') {
+    _oauthSession = '';
+    clearTimeout(_oauthPollTimer);
+  }
+}
 function openConfirm(title, body, cb) {
   _cb = async () => { closeModal('modal-confirm'); await cb(); };
   document.getElementById('confirm-title').textContent = title;

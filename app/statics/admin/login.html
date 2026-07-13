@@ -38,14 +38,14 @@
       const key = el.value.trim();
       if (!key) return;
       try {
-        if (await verifyKey(ADMIN_API+'/verify', key)) { await adminKey.set(key); location.href='/admin/account'; }
+        if (await verifyKey(ADMIN_API+'/verify', key)) { await adminKey.set(key); location.href='/admin/dashboard'; }
         else showToast(t('common.invalidKey'), 'error');
       } catch { showToast(t('common.connectionFailed'), 'error'); }
     }
 
     (async () => {
       const key = await adminKey.get();
-      if (key) try { if (await verifyKey(ADMIN_API+'/verify', key)) location.href='/admin/account'; } catch {}
+      if (key) try { if (await verifyKey(ADMIN_API+'/verify', key)) location.href='/admin/dashboard'; } catch {}
       await renderSiteFooter?.();
     })();
   </script>

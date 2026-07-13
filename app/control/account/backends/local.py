@@ -305,7 +305,6 @@ class LocalAccountRepository:
             if row is None:
                 continue
             record = self._row_to_record(row)
-            qs = record.quota_set()
 
             sets: dict[str, Any] = {"updated_at": ts, "revision": revision}
 
@@ -371,7 +370,8 @@ class LocalAccountRepository:
                 sets["usage_fail_count"] = 0
                 sets["last_fail_at"]     = None
                 sets["last_fail_reason"] = None
-                sets["state_reason"]     = None
+                if patch.state_reason is None:
+                    sets["state_reason"] = None
             sets["ext"] = json.dumps(ext)
 
             col_sql = ", ".join(f"{k} = :{k}" for k in sets)

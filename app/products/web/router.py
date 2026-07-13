@@ -46,6 +46,10 @@ async def admin_root():
 async def admin_login():
     return _serve_html("admin/login.html")
 
+@router.get("/admin/dashboard", include_in_schema=False)
+async def admin_dashboard():
+    return _serve_html("admin/dashboard.html")
+
 @router.get("/admin/account", include_in_schema=False)
 async def admin_account():
     return _serve_html("admin/account.html")

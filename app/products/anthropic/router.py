@@ -3,7 +3,7 @@
 from typing import Any
 
 import orjson
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -42,8 +42,8 @@ class MessagesRequest(BaseModel):
     system:      Any = None          # string or array of content blocks
     max_tokens:  int | None = None   # ignored (Grok doesn't expose this param)
     stream:      bool | None = None
-    temperature: float | None = None
-    top_p:       float | None = None
+    temperature: float | None = Field(None, ge=0, le=2)
+    top_p:       float | None = Field(None, ge=0, le=1)
     tools:       list[dict] | None = None
     tool_choice: Any = None
     thinking:    Any = None          # {type:"enabled", budget_tokens:N} — used to enable thinking output
@@ -64,9 +64,10 @@ async def _safe_sse_anthropic(stream):
         yield f"event: error\ndata: {payload}\n\n"
         yield "data: [DONE]\n\n"
     except Exception as exc:
+        logger.exception("anthropic stream failed: error={}", exc)
         payload = orjson.dumps({
             "type": "error",
-            "error": {"type": "api_error", "message": str(exc)},
+            "error": {"type": "api_error", "message": "Internal server error"},
         }).decode()
         yield f"event: error\ndata: {payload}\n\n"
         yield "data: [DONE]\n\n"
@@ -110,8 +111,8 @@ async def messages_endpoint(req: MessagesRequest):
         system       = req.system,
         stream       = is_stream,
         emit_think   = emit_think,
-        temperature  = req.temperature or 0.8,
-        top_p        = req.top_p or 0.95,
+        temperature  = req.temperature if req.temperature is not None else 0.8,
+        top_p        = req.top_p if req.top_p is not None else 0.95,
         tools        = req.tools or None,
         tool_choice  = req.tool_choice,
     )

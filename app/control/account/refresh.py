@@ -19,7 +19,7 @@ from .quota_defaults import (
     supported_mode_ids,
     supports_mode,
 )
-from .state_machine import is_manageable
+from .state_machine import is_sso_maintainable
 
 if TYPE_CHECKING:
     from .repository import AccountRepository
@@ -160,7 +160,7 @@ class AccountRefreshService:
     async def refresh_on_import(self, tokens: list[str]) -> RefreshResult:
         """Called after bulk import — sync real quotas for all accounts."""
         records = await self._repo.get_accounts(tokens)
-        active = [r for r in records if is_manageable(r)]
+        active = [r for r in records if is_sso_maintainable(r)]
         if not active:
             return RefreshResult(checked=len(records))
 
@@ -207,7 +207,7 @@ class AccountRefreshService:
                   When ``None``, refreshes all pools.
         """
         snapshot = await self._repo.runtime_snapshot()
-        records = [r for r in snapshot.items if is_manageable(r)]
+        records = [r for r in snapshot.items if is_sso_maintainable(r)]
         if pool is not None:
             records = [r for r in records if r.pool == pool]
 
@@ -244,7 +244,9 @@ class AccountRefreshService:
 
     async def refresh_tokens(self, tokens: list[str]) -> RefreshResult:
         """Explicit refresh for a list of tokens (admin / manual trigger)."""
-        records = [r for r in await self._repo.get_accounts(tokens) if is_manageable(r)]
+        records = [
+            r for r in await self._repo.get_accounts(tokens) if is_sso_maintainable(r)
+        ]
         concurrency = get_config("account.refresh.usage_concurrency", 15)
         results = await run_batch(
             records,

@@ -13,9 +13,9 @@ MODELS: tuple[ModelSpec, ...] = (
     # === Chat ==============================================================
 
     # Basic fast; auto/expert require Super+
-    ModelSpec("grok-4.20-0309-non-reasoning",           ModeId.FAST,     Tier.BASIC, Capability.CHAT,       True, "Grok 4.20 0309 Non-Reasoning"),
+    ModelSpec("grok-4.20-0309-non-reasoning",           ModeId.FAST,     Tier.BASIC, Capability.CHAT | Capability.OAUTH_CHAT, True, "Grok 4.20 0309 Non-Reasoning"),
     ModelSpec("grok-4.20-0309",                         ModeId.AUTO,     Tier.SUPER, Capability.CHAT,       True, "Grok 4.20 0309"),
-    ModelSpec("grok-4.20-0309-reasoning",               ModeId.EXPERT,   Tier.SUPER, Capability.CHAT,       True, "Grok 4.20 0309 Reasoning"),
+    ModelSpec("grok-4.20-0309-reasoning",               ModeId.EXPERT,   Tier.SUPER, Capability.CHAT | Capability.OAUTH_CHAT, True, "Grok 4.20 0309 Reasoning"),
     # Super+
     ModelSpec("grok-4.20-0309-non-reasoning-super",     ModeId.FAST,     Tier.SUPER, Capability.CHAT,       True, "Grok 4.20 0309 Non-Reasoning Super"),
     ModelSpec("grok-4.20-0309-super",                   ModeId.AUTO,     Tier.SUPER, Capability.CHAT,       True, "Grok 4.20 0309 Super"),
@@ -24,7 +24,7 @@ MODELS: tuple[ModelSpec, ...] = (
     ModelSpec("grok-4.20-0309-non-reasoning-heavy",     ModeId.FAST,     Tier.HEAVY, Capability.CHAT,       True, "Grok 4.20 0309 Non-Reasoning Heavy"),
     ModelSpec("grok-4.20-0309-heavy",                   ModeId.AUTO,     Tier.HEAVY, Capability.CHAT,       True, "Grok 4.20 0309 Heavy"),
     ModelSpec("grok-4.20-0309-reasoning-heavy",         ModeId.EXPERT,   Tier.HEAVY, Capability.CHAT,       True, "Grok 4.20 0309 Reasoning Heavy"),
-    ModelSpec("grok-4.20-multi-agent-0309",             ModeId.HEAVY,    Tier.HEAVY, Capability.CHAT,       True, "Grok 4.20 Multi-Agent 0309"),
+    ModelSpec("grok-4.20-multi-agent-0309",             ModeId.HEAVY,    Tier.HEAVY, Capability.CHAT | Capability.OAUTH_CHAT, True, "Grok 4.20 Multi-Agent 0309"),
 
     # --- 硬优先级反向选池 (heavy → super → basic) ---
     ModelSpec("grok-4.20-fast",                         ModeId.FAST,     Tier.BASIC, Capability.CHAT,       True, "Grok 4.20 Fast",          prefer_best=True),
@@ -36,6 +36,12 @@ MODELS: tuple[ModelSpec, ...] = (
     # === grok-4.3 (grok-420-computer-use-sa) ==================================
     # Super+（basic 池不支持此模式）
     ModelSpec("grok-4.3-beta",                          ModeId.GROK_4_3, Tier.SUPER, Capability.CHAT,       True, "Grok 4.3 Beta"),
+
+    # === Grok Build OAuth ===================================================
+    ModelSpec("grok-4.5",                               ModeId.FAST,     Tier.BASIC, Capability.OAUTH_CHAT, True, "Grok 4.5 (OAuth)"),
+    ModelSpec("grok-composer-2.5-fast",                  ModeId.FAST,     Tier.BASIC, Capability.OAUTH_CHAT, True, "Grok Composer 2.5 Fast (OAuth)"),
+    ModelSpec("grok-4.3",                               ModeId.FAST,     Tier.BASIC, Capability.OAUTH_CHAT, True, "Grok 4.3 (OAuth)"),
+    ModelSpec("grok-build-0.1",                         ModeId.FAST,     Tier.BASIC, Capability.OAUTH_CHAT, True, "Grok Build 0.1 (OAuth)"),
 
     # === Image ==============================================================
 
