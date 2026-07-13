@@ -17,6 +17,28 @@ from app.dataplane.reverse.protocol.xai_oauth import (
 from app.platform.errors import RateLimitError, UpstreamError
 
 _MAX_ACCOUNT_ATTEMPTS = 3
+_MISSING = object()
+
+# xAI's OAuth Responses upstream only accepts these reasoning effort levels.
+# Anything else (Codex's "max", "none", "minimal") returns HTTP 400 before
+# inference, aborting the stream before response.completed.
+_GROK_SUPPORTED_EFFORTS = frozenset({"low", "medium", "high", "xhigh", "minimal"})
+
+
+def _normalize_effort(effort: Any) -> str | None:
+    """Map a requested reasoning effort to one the upstream accepts.
+
+    Returns None to mean "drop the reasoning field entirely" (e.g. "none").
+    """
+    if not isinstance(effort, str):
+        return effort
+    if effort in _GROK_SUPPORTED_EFFORTS:
+        return effort
+    if effort == "max":  # highest supported level
+        return "high"
+    if effort == "none":  # no reasoning → drop the field
+        return None
+    return "high"  # unknown → safe default
 
 
 def _retryable(status: int) -> bool:
@@ -35,6 +57,107 @@ def _upstream_payload(payload: dict[str, Any], url: str) -> dict[str, Any]:
     if url == API_RESPONSES_URL and "reasoning" in payload:
         return {key: value for key, value in payload.items() if key != "reasoning"}
     return payload
+
+
+# xAI's OAuth Responses upstream only runs this set of tool types. Anything else
+# (Codex's freeform ``custom`` apply_patch, ``tool_search``, unknown types, …)
+# triggers HTTP 422, aborting the SSE stream before ``response.completed`` —
+# Codex then reports "stream disconnected before completion".
+_GROK_SUPPORTED_TOOL_TYPES = frozenset(
+    {
+        "function",
+        "web_search",
+        "x_search",
+        "file_search",
+        "collections_search",
+        "code_execution",
+        "code_interpreter",
+        "mcp",
+        "shell",
+    }
+)
+
+
+def _normalize_tools_for_upstream(tools: Any) -> Any:
+    """Make the tool list acceptable to xAI's OAuth Responses upstream.
+
+    Remap Codex's freeform ``custom`` tool (e.g. ``apply_patch``) to an
+    equivalent ``function`` tool taking a single ``input`` string — the same
+    schema Codex uses for function-mode apply_patch, so the returned
+    ``function_call`` stays coherent — and drop any tool whose type the upstream
+    cannot run. See :data:`_GROK_SUPPORTED_TOOL_TYPES`.
+    """
+    if not isinstance(tools, list):
+        return tools
+    normalized: list[Any] = []
+    for tool in tools:
+        if not isinstance(tool, dict):
+            continue
+        kind = tool.get("type")
+        if kind == "custom" and tool.get("name"):
+            normalized.append(
+                {
+                    "type": "function",
+                    "name": tool["name"],
+                    "description": tool.get("description") or "",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "input": {
+                                "type": "string",
+                                "description": "Raw tool input forwarded verbatim.",
+                            }
+                        },
+                        "required": ["input"],
+                        "additionalProperties": False,
+                    },
+                }
+            )
+        elif kind in _GROK_SUPPORTED_TOOL_TYPES:
+            normalized.append(tool)
+        # else: drop tool_search / unknown types — upstream rejects them.
+    return normalized
+
+
+def _strip_key_recursive(value: Any, key: str) -> bool:
+    """Delete every occurrence of ``key`` anywhere in a nested dict/list."""
+    changed = False
+    if isinstance(value, dict):
+        if value.pop(key, _MISSING) is not _MISSING:
+            changed = True
+        for child in value.values():
+            changed = _strip_key_recursive(child, key) or changed
+    elif isinstance(value, list):
+        for child in value:
+            changed = _strip_key_recursive(child, key) or changed
+    return changed
+
+
+def _tool_names(tools: Any) -> set[str]:
+    names: set[str] = set()
+    if isinstance(tools, list):
+        for tool in tools:
+            if isinstance(tool, dict) and tool.get("type") == "function":
+                name = tool.get("name") or (tool.get("function") or {}).get("name")
+                if name:
+                    names.add(str(name))
+    return names
+
+
+def _sanitize_tool_choice(tool_choice: Any, tools: Any) -> Any:
+    """Drop a tool_choice that points at a tool we removed (else upstream 422)."""
+    if isinstance(tools, list) and not tools:
+        return None
+    if not isinstance(tool_choice, dict):
+        return tool_choice
+    choice_type = str(tool_choice.get("type") or "")
+    if choice_type and choice_type not in _GROK_SUPPORTED_TOOL_TYPES:
+        return None
+    if choice_type == "function":
+        name = tool_choice.get("name") or (tool_choice.get("function") or {}).get("name")
+        if name and str(name) not in _tool_names(tools):
+            return None
+    return tool_choice
 
 
 async def _json_with_failover(
@@ -174,8 +297,42 @@ def _responses_payload(payload: dict[str, Any]) -> dict[str, Any]:
     }
     body = {key: value for key, value in payload.items() if key in allowed and value is not None}
     reasoning = body.get("reasoning")
-    if isinstance(reasoning, dict) and reasoning.get("effort") == "minimal":
-        body["reasoning"] = {**reasoning, "effort": "low"}
+    if isinstance(reasoning, dict) and "effort" in reasoning:
+        effort = _normalize_effort(reasoning.get("effort"))
+        if effort is None:
+            body.pop("reasoning", None)
+        else:
+            body["reasoning"] = {**reasoning, "effort": effort}
+    if "tools" in body:
+        body["tools"] = _normalize_tools_for_upstream(body["tools"])
+    # xAI rejects the `external_web_access` sub-field (anywhere it appears) and
+    # the Codex `additional_tools` input carrier with a 422 before inference.
+    _strip_key_recursive(body, "external_web_access")
+    if isinstance(body.get("input"), list):
+        # Drop replayed `reasoning` history items: xAI's OAuth upstream rejects
+        # echoed reasoning (encrypted_content) with HTTP 400 on multi-turn calls.
+        body["input"] = [
+            item
+            for item in body["input"]
+            if not (
+                isinstance(item, dict)
+                and item.get("type") in ("additional_tools", "reasoning")
+            )
+        ]
+    # We don't replay reasoning, so stop asking the upstream to return encrypted
+    # reasoning content back.
+    if isinstance(body.get("include"), list):
+        body["include"] = [
+            inc for inc in body["include"] if inc != "reasoning.encrypted_content"
+        ]
+        if not body["include"]:
+            body.pop("include", None)
+    if "tool_choice" in body:
+        choice = _sanitize_tool_choice(body["tool_choice"], body.get("tools"))
+        if choice is None:
+            body.pop("tool_choice", None)
+        else:
+            body["tool_choice"] = choice
     return body
 
 
@@ -275,7 +432,7 @@ def _chat_to_responses(
     if instructions:
         body["instructions"] = "\n\n".join(instructions)
     if tools:
-        body["tools"] = [
+        body["tools"] = _normalize_tools_for_upstream([
             {
                 "type": "function",
                 **(tool.get("function") or {}),
@@ -283,7 +440,7 @@ def _chat_to_responses(
             if isinstance(tool, dict) and isinstance(tool.get("function"), dict)
             else tool
             for tool in tools
-        ]
+        ])
     if tool_choice is not None:
         if isinstance(tool_choice, dict) and isinstance(tool_choice.get("function"), dict):
             body["tool_choice"] = {
@@ -299,9 +456,9 @@ def _chat_to_responses(
     if max_tokens is not None:
         body["max_output_tokens"] = max_tokens
     if reasoning_effort:
-        body["reasoning"] = {
-            "effort": "low" if reasoning_effort in {"none", "minimal"} else reasoning_effort
-        }
+        effort = _normalize_effort(reasoning_effort)
+        if effort is not None:
+            body["reasoning"] = {"effort": effort}
     return body
 
 

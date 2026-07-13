@@ -422,7 +422,7 @@ class GrokBuildAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(body["instructions"], "Be concise")
         self.assertEqual(body["tools"][0]["name"], "weather")
         self.assertEqual(body["tool_choice"], {"type": "function", "name": "weather"})
-        self.assertEqual(body["reasoning"], {"effort": "low"})
+        self.assertEqual(body["reasoning"], {"effort": "minimal"})
         self.assertEqual(body["temperature"], 0)
         self.assertEqual(body["top_p"], 0)
 
