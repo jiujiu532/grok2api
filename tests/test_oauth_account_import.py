@@ -210,6 +210,73 @@ class OAuthAccountTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(updated.ext["oauth_refresh_token"], "refresh-secret-2")
         self.assertEqual(updated.state_reason, "oauth_reauthorized")
 
+    
+    async def test_reauth_restores_soft_deleted_oauth_account(self):
+        access = _jwt(sub="user-deleted", email="deleted@example.com", team_id="team-d")
+        token_payload = {
+            "access_token": access,
+            "refresh_token": "refresh-deleted",
+            "id_token": _jwt(sub="user-deleted", email="deleted@example.com"),
+            "expires_in": 3600,
+        }
+        with (
+            patch.object(
+                oauth_mod,
+                "post_oauth_form",
+                AsyncMock(return_value=(200, token_payload)),
+            ),
+            patch.object(
+                oauth_mod,
+                "get_oauth_json",
+                AsyncMock(side_effect=_metadata),
+            ),
+        ):
+            first = await self.service.poll_device_login(_session("device-deleted-1"))
+
+        account_id = first["account_id"]
+        await self.repo.delete_accounts([account_id])
+        deleted = (await self.repo.get_accounts([account_id]))[0]
+        self.assertTrue(deleted.is_deleted())
+
+        listed = await admin_tokens.list_tokens(repo=self.repo)
+        self.assertNotIn(account_id, listed.body.decode())
+
+        with (
+            patch.object(
+                oauth_mod,
+                "post_oauth_form",
+                AsyncMock(
+                    return_value=(
+                        200,
+                        {
+                            **token_payload,
+                            "access_token": _jwt(
+                                sub="user-deleted",
+                                email="deleted@example.com",
+                                team_id="team-d",
+                            ),
+                            "refresh_token": "refresh-deleted-2",
+                        },
+                    )
+                ),
+            ),
+            patch.object(
+                oauth_mod,
+                "get_oauth_json",
+                AsyncMock(side_effect=_metadata),
+            ),
+        ):
+            second = await self.service.poll_device_login(_session("device-deleted-2"))
+
+        restored = (await self.repo.get_accounts([account_id]))[0]
+        self.assertTrue(second["updated"])
+        self.assertFalse(restored.is_deleted())
+        self.assertEqual(restored.status, AccountStatus.ACTIVE)
+        self.assertEqual(restored.ext["oauth_refresh_token"], "refresh-deleted-2")
+
+        listed = await admin_tokens.list_tokens(repo=self.repo)
+        self.assertIn(account_id, listed.body.decode())
+
     async def test_refresh_rotation_and_terminal_failure_are_persisted_once(self):
         account_id = "oauth:refresh-test"
         await self.repo.upsert_accounts(
@@ -445,7 +512,7 @@ class OAuthSurfaceTests(unittest.TestCase):
         self.assertIn("'/oauth/device/start'", html)
         self.assertIn("`/oauth/device/${encodeURIComponent(_oauthSession)}`", html)
         self.assertIn("'/oauth/accounts/metadata'", html)
-        self.assertIn("oauthQuotaHtml(t)", html)
+        self.assertIn("oauthPlanHtml(t)", html)
         self.assertNotIn("oauth_access_token", html)
         self.assertNotIn("oauth_refresh_token", html)
 

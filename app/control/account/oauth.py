@@ -179,22 +179,29 @@ def _model_ids(payload: dict[str, Any]) -> list[str]:
 
 
 def _subscription_label(raw: str) -> str:
-    normalized = "".join(ch for ch in raw.lower() if ch.isalnum())
+    normalized = "".join(ch for ch in (raw or "").lower() if ch.isalnum())
+    if not normalized or normalized in {"free", "basic", "subscriptiontierfree"}:
+        return "Free"
     if normalized in {"grokpro", "subscriptiontiergrokpro", "supergrok"}:
         return "SuperGrok"
     if "heavy" in normalized or "supergrokpro" in normalized:
         return "SuperGrok Heavy"
     if "lite" in normalized:
         return "SuperGrok Lite"
-    return raw
+    return raw or "Free"
 
 
 def _public_metadata(record: AccountRecord) -> dict[str, Any]:
     ext = record.ext
+    prompt_tokens = int(ext.get("cache_prompt_tokens") or 0)
+    cached_tokens = int(ext.get("cache_cached_tokens") or 0)
+    cache_rate = None
+    if prompt_tokens > 0:
+        cache_rate = round(min(100.0, max(0.0, cached_tokens * 100.0 / prompt_tokens)), 1)
     return {
         "account_id": record.token,
-        "oauth_plan": str(ext.get("oauth_subscription_label") or ""),
-        "oauth_plan_raw": str(ext.get("oauth_subscription_tier") or ""),
+        "oauth_plan": str(ext.get("oauth_subscription_label") or "Free"),
+        "oauth_plan_raw": str(ext.get("oauth_subscription_tier") or "free"),
         "oauth_has_grok_code_access": bool(ext.get("oauth_has_grok_code_access")),
         "oauth_usage_percent": ext.get("oauth_credit_usage_percent"),
         "oauth_period_start": ext.get("oauth_billing_period_start"),
@@ -204,6 +211,9 @@ def _public_metadata(record: AccountRecord) -> dict[str, Any]:
         "oauth_api_models": ext.get("oauth_api_models") or [],
         "oauth_language_models": ext.get("oauth_language_models") or [],
         "oauth_metadata_synced_at": ext.get("oauth_metadata_synced_at"),
+        "cache_prompt_tokens": prompt_tokens,
+        "cache_cached_tokens": cached_tokens,
+        "cache_rate": cache_rate,
     }
 
 
@@ -215,6 +225,8 @@ class GrokOAuthService:
         self._lock = asyncio.Lock()
         self._refresh_locks: dict[str, asyncio.Lock] = {}
         self._inflight: dict[str, int] = {}
+        # sticky_key -> account_id for prompt-cache affinity
+        self._sticky: dict[str, str] = {}
 
     async def start_device_login(self) -> dict[str, Any]:
         status, payload = await post_oauth_form(
@@ -310,6 +322,7 @@ class GrokOAuthService:
                         state_reason="oauth_reauthorized",
                         ext_merge=ext,
                         clear_failures=True,
+                        clear_deleted=True,
                     )
                 ]
             )
@@ -448,8 +461,10 @@ class GrokOAuthService:
         *,
         model: str = "",
         exclude: set[str] | None = None,
+        sticky_key: str = "",
     ) -> OAuthAccountLease:
         attempted = set(exclude or ())
+        sticky = str(sticky_key or "").strip()
         last_error: AppError | None = None
         while True:
             snapshot = await self._repo.runtime_snapshot()
@@ -466,23 +481,37 @@ class GrokOAuthService:
                     raise last_error
                 raise RateLimitError("没有可用的 OAuth 账户")
 
-            # ponytail: process-local inflight is sufficient for the current
-            # single-worker default; persist it if multi-worker skew is measured.
+            # ponytail: process-local inflight + sticky map is enough for the
+            # single-worker default; persist if multi-worker skew is measured.
             async with self._lock:
-                record, model_sets = min(
-                    candidates,
-                    key=lambda item: (
-                        self._inflight.get(item[0].token, 0),
-                        item[0].last_use_at or 0,
-                        item[0].usage_fail_count,
-                    ),
+                preferred_id = self._sticky.get(sticky) if sticky else ""
+                preferred = next(
+                    (item for item in candidates if item[0].token == preferred_id),
+                    None,
                 )
+                if preferred is not None:
+                    record, model_sets = preferred
+                else:
+                    record, model_sets = min(
+                        candidates,
+                        key=lambda item: (
+                            self._inflight.get(item[0].token, 0),
+                            item[0].last_use_at or 0,
+                            item[0].usage_fail_count,
+                        ),
+                    )
+                if sticky:
+                    self._sticky[sticky] = record.token
                 self._inflight[record.token] = self._inflight.get(record.token, 0) + 1
             attempted.add(record.token)
             try:
                 access_token = await self.access_token(record.token)
             except AppError as exc:
                 last_error = exc
+                if sticky:
+                    async with self._lock:
+                        if self._sticky.get(sticky) == record.token:
+                            self._sticky.pop(sticky, None)
                 await self.release_id(record.token)
                 continue
             return OAuthAccountLease(
@@ -552,7 +581,30 @@ class GrokOAuthService:
             )
             return next_access
 
-    async def success(self, lease: OAuthAccountLease) -> None:
+    async def success(
+        self,
+        lease: OAuthAccountLease,
+        *,
+        prompt_tokens: int = 0,
+        cached_tokens: int = 0,
+    ) -> None:
+        ext_merge: dict[str, Any] = {"oauth_cooldown_until": 0}
+        prompt = max(0, int(prompt_tokens or 0))
+        cached = max(0, int(cached_tokens or 0))
+        if prompt > 0 or cached > 0:
+            records = await self._repo.get_accounts([lease.account_id])
+            prev = records[0].ext if records else {}
+            total_prompt = int(prev.get("cache_prompt_tokens") or 0) + prompt
+            total_cached = int(prev.get("cache_cached_tokens") or 0) + min(cached, prompt if prompt else cached)
+            ext_merge.update(
+                {
+                    "cache_prompt_tokens": total_prompt,
+                    "cache_cached_tokens": total_cached,
+                    "cache_last_prompt_tokens": prompt,
+                    "cache_last_cached_tokens": min(cached, prompt if prompt else cached),
+                    "cache_last_at": now_ms(),
+                }
+            )
         await self._repo.patch_accounts(
             [
                 AccountPatch(
@@ -561,7 +613,7 @@ class GrokOAuthService:
                     usage_use_delta=1,
                     last_use_at=now_ms(),
                     state_reason="oauth_ok",
-                    ext_merge={"oauth_cooldown_until": 0},
+                    ext_merge=ext_merge,
                     clear_failures=True,
                 )
             ]

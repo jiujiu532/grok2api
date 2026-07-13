@@ -120,8 +120,20 @@ def _quota_brief(q: dict) -> dict:
     return out
 
 
-def _serialize_record(r) -> dict:
+def _cache_stats(ext: dict | None) -> dict:
+    ext = ext or {}
+    prompt = int(ext.get("cache_prompt_tokens") or 0)
+    cached = int(ext.get("cache_cached_tokens") or 0)
+    rate = round(min(100.0, max(0.0, cached * 100.0 / prompt)), 1) if prompt > 0 else None
     return {
+        "cache_prompt_tokens": prompt,
+        "cache_cached_tokens": cached,
+        "cache_rate": rate,
+    }
+
+
+def _serialize_record(r) -> dict:
+    payload = {
         "token":       r.token,
         "pool":        r.pool or "basic",
         "status":      r.status,
@@ -131,6 +143,8 @@ def _serialize_record(r) -> dict:
         "last_used_at": r.last_use_at,
         "tags":        r.tags or [],
     }
+    payload.update(_cache_stats(getattr(r, "ext", None) or {}))
+    return payload
 
 
 def _json(data) -> Response:

@@ -321,6 +321,8 @@ class RedisAccountRepository:
                 updates["last_fail_reason"] = ""
                 if patch.state_reason is None:
                     updates["state_reason"] = ""
+            if patch.clear_deleted:
+                updates["deleted_at"] = ""
             updates["ext"] = json.dumps(ext)
 
             await self._r.hset(key, mapping=updates)

@@ -201,6 +201,10 @@ class LocalAccountRepository:
                     "total": cls._payload_int(total),
                 }
 
+        keys = set(row.keys())
+        prompt = cls._payload_int(row["cache_prompt_tokens"] if "cache_prompt_tokens" in keys else 0)
+        cached = cls._payload_int(row["cache_cached_tokens"] if "cache_cached_tokens" in keys else 0)
+        rate = round(min(100.0, max(0.0, cached * 100.0 / prompt)), 1) if prompt > 0 else None
         return {
             "token": row["token"],
             "pool": row["pool"] or "basic",
@@ -210,6 +214,9 @@ class LocalAccountRepository:
             "fail_count": cls._payload_int(row["usage_fail_count"]),
             "last_used_at": row["last_use_at"],
             "tags": cls._parse_tags(row["tags"]),
+            "cache_prompt_tokens": prompt,
+            "cache_cached_tokens": cached,
+            "cache_rate": rate,
         }
 
     def _upsert_sync(
@@ -372,6 +379,8 @@ class LocalAccountRepository:
                 sets["last_fail_reason"] = None
                 if patch.state_reason is None:
                     sets["state_reason"] = None
+            if patch.clear_deleted:
+                sets["deleted_at"] = None
             sets["ext"] = json.dumps(ext)
 
             col_sql = ", ".join(f"{k} = :{k}" for k in sets)
@@ -587,6 +596,10 @@ class LocalAccountRepository:
                 usage_use_count,
                 usage_fail_count,
                 last_use_at,
+                CASE WHEN json_valid(ext)
+                    THEN json_extract(ext, '$.cache_prompt_tokens') END AS cache_prompt_tokens,
+                CASE WHEN json_valid(ext)
+                    THEN json_extract(ext, '$.cache_cached_tokens') END AS cache_cached_tokens,
                 {quota_select}
             FROM {_TBL}
             WHERE deleted_at IS NULL

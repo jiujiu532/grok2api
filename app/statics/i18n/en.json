@@ -438,7 +438,8 @@
       "basic": "Basic",
       "super": "Super",
       "heavy": "Heavy",
-      "oauth": "OAuth"
+      "oauth": "OAuth",
+      "free": "Free"
     },
     "mode": {
       "auto": "Auto",
@@ -453,7 +454,26 @@
       "disabled": "Disabled",
       "expired": "Expired",
       "invalid": "Abnormal"
-    }
+    },
+    "colTier": "Tier",
+    "colImport": "Import",
+    "statTierFree": "Free accounts",
+    "statTierSuper": "Super accounts",
+    "statTierHeavy": "Heavy accounts",
+    "tier": {
+      "free": "Free",
+      "super": "Super",
+      "heavy": "Heavy"
+    },
+    "importMethod": {
+      "oauth": "OAuth",
+      "sso": "SSO"
+    },
+    "colUsage": "Used",
+    "colReset": "Reset",
+    "colCacheRate": "Cache",
+    "cacheRateUnknown": "No cache stats yet",
+    "cacheRateTip": "Cached {cached}/{prompt} tokens · {rate}%"
   },
   "config": {
     "pageTitle": "Grok2API - Configuration Management",

@@ -357,9 +357,14 @@
       font-weight:500;
       border:none;
     }
-    .table-card .badge-basic {
+    .table-card .badge-basic,
+    .table-card .badge-free {
       color:#6d6d6d;
       background:#f7f7f7;
+    }
+    .table-card .badge-sso {
+      color:#57534e;
+      background:#f4f4f5;
     }
     .table-card .badge-super {
       color:#4c76b2;
@@ -538,6 +543,24 @@
     .q-z { background:#f6f6f6; color:#a0a0a6 }
     .q-oauth-plan { background:#f5f0ff; color:#7c3aed }
     .q-oauth-usage { background:#fff7ed; color:#c2410c }
+    .table-card td[data-quota-only] span[data-tip] { cursor:default }
+    .usage-bar {
+      width:92px; margin:0 auto; display:grid; gap:4px; justify-items:stretch;
+    }
+    .usage-bar-track {
+      height:6px; border-radius:999px; background:#eceae4; overflow:hidden;
+    }
+    .usage-bar-fill {
+      height:100%; border-radius:999px; background:#86efac; transition:width .25s ease;
+    }
+    .usage-bar-fill.is-mid { background:#fbbf24 }
+    .usage-bar-fill.is-high { background:#f97316 }
+    .usage-bar-fill.is-full { background:#ef4444 }
+    .usage-bar-fill.is-unknown { background:#d4d4d8; width:100% !important; opacity:.45 }
+    .usage-bar-label {
+      font-size:11px; line-height:1; color:#8a847b; font-variant-numeric:tabular-nums; text-align:center;
+    }
+    .usage-bar.is-empty .usage-bar-label { color:#b0aaa0 }
 
     /* Token monospace */
     .tok { font-family:ui-monospace,monospace; font-size:12px; color:#333 }
@@ -770,63 +793,6 @@
     </div>
   </div>
 
-  <!-- Quota stats (6 columns) -->
-  <div class="stat-grid-quota" id="overview-quota-stats">
-    <div class="stat-cell" data-stat-card="calls">
-      <div class="stat-top">
-        <div class="stat-label" data-i18n="account.statCalls">调用总数</div>
-        <span class="stat-icon" style="color:#111">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M5 19h14"/><path d="M8 16V10"/><path d="M12 16V6"/><path d="M16 16v-3"/></svg>
-        </span>
-      </div>
-      <div class="stat-num" id="s-calls" style="color:#111">0</div>
-    </div>
-    <div class="stat-cell" data-quota-only data-quota-card="auto">
-      <div class="stat-top">
-        <div class="stat-label" data-i18n="account.statAuto">Auto 余额</div>
-        <span class="stat-icon" style="color:#2563eb">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M6 19h12"/><path d="M12 16V9"/></svg>
-        </span>
-      </div>
-      <div class="stat-num" id="s-qa" style="color:#2563eb">0</div>
-    </div>
-    <div class="stat-cell" data-quota-only data-quota-card="fast">
-      <div class="stat-top">
-        <div class="stat-label" data-i18n="account.statFast">Fast 余额</div>
-        <span class="stat-icon" style="color:#16a34a">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M6 19h12"/><path d="M10 16v-4"/><path d="M14 16V8"/></svg>
-        </span>
-      </div>
-      <div class="stat-num" id="s-qf" style="color:#16a34a">0</div>
-    </div>
-    <div class="stat-cell" data-quota-only data-quota-card="expert">
-      <div class="stat-top">
-        <div class="stat-label" data-i18n="account.statExpert">Expert 余额</div>
-        <span class="stat-icon" style="color:#7c3aed">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M6 19h12"/><path d="M8 16v-2"/><path d="M12 16v-6"/><path d="M16 16V6"/></svg>
-        </span>
-      </div>
-      <div class="stat-num" id="s-qe" style="color:#7c3aed">0</div>
-    </div>
-    <div class="stat-cell" data-quota-only data-quota-card="heavy">
-      <div class="stat-top">
-        <div class="stat-label" data-i18n="account.statHeavy">Heavy 余额</div>
-        <span class="stat-icon" style="color:#b0632a">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M5 19h14"/><path d="M7 16v-1"/><path d="M10 16v-4"/><path d="M14 16V8"/><path d="M17 16V5"/></svg>
-        </span>
-      </div>
-      <div class="stat-num" id="s-qh" style="color:#b0632a">0</div>
-    </div>
-    <div class="stat-cell" data-quota-only data-quota-card="console">
-      <div class="stat-top">
-        <div class="stat-label" data-i18n="account.statConsole">Console 余额</div>
-        <span class="stat-icon" style="color:#2e7d52">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M4 19h16"/><path d="M6 16v-1"/><path d="M9 16v-3"/><path d="M12 16v-6"/><path d="M15 16V8"/><path d="M18 16V5"/></svg>
-        </span>
-      </div>
-      <div class="stat-num" id="s-qc" style="color:#2e7d52">0</div>
-    </div>
-  </div>
 
   <div class="section-head" style="margin-top:40px">
     <div class="section-title-row">
@@ -983,7 +949,8 @@
         <tr>
           <th style="width:36px"><input type="checkbox" class="cb" id="cb-all" onchange="toggleAll(this.checked)"></th>
           <th style="width:200px" data-i18n="account.colToken">Token</th>
-          <th class="table-center" style="width:70px" data-i18n="account.colType">类型</th>
+          <th class="table-center" style="width:72px" data-i18n="account.colTier">档位</th>
+          <th class="table-center" style="width:72px" data-i18n="account.colImport">导入</th>
           <th class="table-center" style="width:70px" data-i18n="account.colStatus">状态</th>
           <th class="table-center" style="width:80px" data-i18n="account.colHealth">健康</th>
           <th data-quota-only>
@@ -996,6 +963,9 @@
               <span class="q-pill q-c">C</span>
             </span>
           </th>
+          <th class="table-center" data-quota-only style="width:118px" data-i18n="account.colUsage">已用</th>
+          <th class="table-center" style="width:96px" data-i18n="account.colCacheRate">Cache</th>
+          <th class="table-center" data-quota-only style="width:96px" data-i18n="account.colReset">重置</th>
           <th class="table-center" data-i18n="account.colSuccess">成功</th>
           <th class="table-center" data-i18n="account.colFail">失败</th>
           <th class="table-center" data-i18n="account.colRate">成功率</th>
@@ -1206,6 +1176,21 @@ function waitI18n() {
 }
 
 // ── Boot ───────────────────────────────────────────────────────────────────
+const USAGE_REFRESH_MS = 5 * 60 * 1000;
+let _usageRefreshTimer = null;
+
+function startUsageAutoRefresh() {
+  if (_usageRefreshTimer) clearInterval(_usageRefreshTimer);
+  _usageRefreshTimer = setInterval(() => {
+    if (document.hidden) return;
+    if (_batchEs || _batchStarting) return;
+    load({ silent: true });
+  }, USAGE_REFRESH_MS);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) load({ silent: true });
+  }, { once: false });
+}
+
 (async () => {
   await waitI18n();
   applyAccountI18n();
@@ -1216,6 +1201,7 @@ function waitI18n() {
   if (!await keepAdminSession(ADMIN_API + '/verify', key))
     return location.href = '/admin/login';
   load();
+  startUsageAutoRefresh();
 })();
 
 // ── API ────────────────────────────────────────────────────────────────────
@@ -1235,7 +1221,8 @@ async function _api(method, path, body) {
 let selectionStrategy = 'quota';
 
 // ── Load ───────────────────────────────────────────────────────────────────
-async function load() {
+async function load(opts = {}) {
+  const silent = !!opts.silent;
   try {
     const [data, status, oauthMetadata] = await Promise.all([
       _api('GET', '/tokens'),
@@ -1259,16 +1246,16 @@ async function load() {
     applyStrategyUI();
     invalidateTokenView();
     render();
-  } catch (e) { showToast(`${tr('account.loadFailed', null, '加载失败')}: ${e.message}`, 'error'); }
+  } catch (e) {
+    if (!silent) showToast(`${tr('account.loadFailed', null, '加载失败')}: ${e.message}`, 'error');
+  }
 }
 
 function applyStrategyUI() {
-  // Random strategy: hide quota-related stat cells and the table column.
+  // Random strategy: hide quota-related table columns.
   const isRandom = selectionStrategy === 'random';
   const statsGrid = document.getElementById('overview-stats');
   if (statsGrid) statsGrid.classList.toggle('mode-random', isRandom);
-  const quotaGrid = document.getElementById('overview-quota-stats');
-  if (quotaGrid) quotaGrid.style.display = isRandom ? 'none' : '';
   document.querySelectorAll('[data-quota-only]').forEach(el => {
     el.style.display = isRandom ? 'none' : '';
   });
@@ -1281,6 +1268,49 @@ function render() {
   renderFilters(view);
   renderTable(view);
   applyStrategyUI();
+}
+
+
+function isOauthToken(token) {
+  return token.auth_type === 'oauth' || (token.tags || []).includes('oauth');
+}
+
+function accountTier(token) {
+  if (isOauthToken(token)) {
+    const raw = String(token.oauth_plan || token.oauth_plan_raw || '');
+    const compact = raw.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (compact.includes('heavy') || compact.includes('supergrokpro')) return 'heavy';
+    if (
+      compact.includes('super')
+      || compact.includes('grokpro')
+      || compact.includes('lite')
+      || compact === 'pro'
+    ) return 'super';
+    return 'free';
+  }
+  const pool = String(token.pool || 'basic').toLowerCase();
+  if (pool === 'heavy') return 'heavy';
+  if (pool === 'super') return 'super';
+  return 'free';
+}
+
+function importMethod(token) {
+  return isOauthToken(token) ? 'oauth' : 'sso';
+}
+
+function tierLabel(tier) {
+  return tr(`account.tier.${tier}`, null, {
+    free: 'Free',
+    super: 'Super',
+    heavy: 'Heavy',
+  }[tier] || tier);
+}
+
+function importLabel(method) {
+  return tr(`account.importMethod.${method}`, null, {
+    oauth: 'OAuth',
+    sso: 'SSO',
+  }[method] || method);
 }
 
 function getTokenView() {
@@ -1311,12 +1341,14 @@ function getTokenView() {
   const healthCounts = { all: 0, healthy: 0, warning: 0, critical: 0 };
   const nsfwCounts = { all: 0, enabled: 0, disabled: 0 };
   const poolCounts = new Map([['all', 0]]);
-  const poolsSet = new Set(['basic', 'super', 'heavy']);
+  const poolsSet = new Set(['free', 'super', 'heavy']);
   const filteredItems = [];
+  const tierCounts = { free: 0, super: 0, heavy: 0 };
 
   for (const token of allTokens) {
-    const isOauth = token.auth_type === 'oauth' || (token.tags || []).includes('oauth');
-    const pool = isOauth ? 'oauth' : (token.pool || 'basic');
+    const isOauth = isOauthToken(token);
+    const tier = accountTier(token);
+    const pool = tier; // filter chips use free/super/heavy
     const quota = token.quota || {};
     const nsfwEnabled = (token.tags || []).includes('nsfw');
     const invalid = isInvalidStatus(token.status);
@@ -1354,6 +1386,7 @@ function getTokenView() {
         stats.oauthModels.add(model);
       }
     }
+    if (tierCounts[tier] != null) tierCounts[tier] += 1;
 
     if (token.status === 'active') stats.active += 1;
     if (token.status === 'cooling') stats.cooling += 1;
@@ -1400,12 +1433,16 @@ function getTokenView() {
     nsfwCounts,
     poolCounts,
     pools: Array.from(poolsSet),
+    tierCounts,
     filteredItems,
   };
   return _tokenViewCache;
 }
 
 function poolLabel(pool) {
+  if (pool === 'basic') return tierLabel('free');
+  if (pool === 'free' || pool === 'super' || pool === 'heavy') return tierLabel(pool);
+  if (pool === 'oauth') return importLabel('oauth');
   return tr(`account.pool.${pool}`, null, pool);
 }
 
@@ -1428,6 +1465,130 @@ function accountHealth(token) {
   return 'healthy';
 }
 
+
+function accountUsageInfo(t) {
+  if (isOauthToken(t)) {
+    const rawUsage = Number(t.oauth_usage_percent);
+    if (!Number.isFinite(rawUsage)) {
+      return {
+        label: tr('account.oauthUsageUnknown', null, '额度未同步'),
+        tip: tr('account.oauthUsageUnknown', null, '额度未同步'),
+        has: false,
+        percent: null,
+      };
+    }
+    const usage = Math.max(0, Math.min(100, rawUsage));
+    const label = `${fmtPercent(usage)}%`;
+    return {
+      label,
+      tip: tr('account.oauthUsageUsed', { n: fmtPercent(usage) }, `已用 ${fmtPercent(usage)}%`),
+      has: true,
+      percent: usage,
+    };
+  }
+  const q = t.quota || {};
+  const parts = [];
+  let primary = null;
+  for (const [mode, letter] of [['auto','A'],['fast','F'],['expert','E'],['heavy','H'],['console','C']]) {
+    const win = q[mode];
+    if (!win || win.remaining == null || win.total == null || !win.total) continue;
+    const used = Math.max(0, win.total - win.remaining);
+    const pct = Math.max(0, Math.min(100, Math.round(used / win.total * 100)));
+    parts.push(`${letter}:${pct}%`);
+    if (primary == null) primary = pct;
+  }
+  if (!parts.length) {
+    return { label: tr('account.na', null, '—'), tip: tr('account.na', null, '—'), has: false, percent: null };
+  }
+  return {
+    label: `${primary}%`,
+    tip: parts.join(' · '),
+    has: true,
+    percent: primary,
+  };
+}
+
+function usageLevel(percent) {
+  if (percent == null || !Number.isFinite(percent)) return 'unknown';
+  if (percent >= 95) return 'full';
+  if (percent >= 75) return 'high';
+  if (percent >= 40) return 'mid';
+  return 'low';
+}
+
+function cacheRateInfo(t) {
+  const prompt = Number(t.cache_prompt_tokens || 0);
+  const cached = Number(t.cache_cached_tokens || 0);
+  let rate = t.cache_rate;
+  if (rate == null && prompt > 0) rate = Math.round(Math.min(100, Math.max(0, cached * 100 / prompt)) * 10) / 10;
+  if (rate == null || !Number.isFinite(Number(rate)) || prompt <= 0) {
+    return { label: tr('account.na', null, '—'), tip: tr('account.cacheRateUnknown', null, '尚无 cache 统计'), has: false, percent: null };
+  }
+  const pct = Math.max(0, Math.min(100, Number(rate)));
+  return {
+    label: `${fmtPercent(pct)}%`,
+    tip: tr('account.cacheRateTip', { cached, prompt, rate: fmtPercent(pct) }, `缓存 ${cached}/${prompt} tokens · ${fmtPercent(pct)}%`),
+    has: true,
+    percent: pct,
+  };
+}
+
+function cacheRateBarHtml(t) {
+  const info = cacheRateInfo(t);
+  const level = usageLevel(info.percent);
+  const width = info.has && info.percent != null ? Math.max(0, Math.min(100, info.percent)) : 0;
+  const fillClass = level === 'unknown' ? 'usage-bar-fill is-unknown'
+    : level === 'full' ? 'usage-bar-fill is-full'
+    : level === 'high' ? 'usage-bar-fill is-high'
+    : level === 'mid' ? 'usage-bar-fill is-mid'
+    : 'usage-bar-fill';
+  return `<div class="usage-bar${info.has ? '' : ' is-empty'}" data-tip="${xe(info.tip)}">
+      <div class="usage-bar-track"><div class="${fillClass}" style="width:${width}%"></div></div>
+      <div class="usage-bar-label">${xe(info.label)}</div>
+    </div>`;
+}
+
+function usageBarHtml(t) {
+  const info = accountUsageInfo(t);
+  const level = usageLevel(info.percent);
+  const width = info.has && info.percent != null ? Math.max(0, Math.min(100, info.percent)) : 0;
+  const fillClass = level === 'unknown' ? 'usage-bar-fill is-unknown'
+    : level === 'full' ? 'usage-bar-fill is-full'
+    : level === 'high' ? 'usage-bar-fill is-high'
+    : level === 'mid' ? 'usage-bar-fill is-mid'
+    : 'usage-bar-fill';
+  return `<div class="usage-bar${info.has ? '' : ' is-empty'}" data-tip="${xe(info.tip)}">
+      <div class="usage-bar-track"><div class="${fillClass}" style="width:${width}%"></div></div>
+      <div class="usage-bar-label">${xe(info.label)}</div>
+    </div>`;
+}
+
+function accountResetInfo(t) {
+  if (isOauthToken(t)) {
+    if (!t.oauth_period_end || Number.isNaN(new Date(t.oauth_period_end).getTime())) {
+      return { label: tr('account.na', null, '—'), tip: tr('account.na', null, '—') };
+    }
+    const label = fmtResetDate(t.oauth_period_end);
+    return {
+      label,
+      tip: tr('account.oauthResetsAt', { time: fmtDate(t.oauth_period_end) }, `${fmtDate(t.oauth_period_end)} 重置`),
+    };
+  }
+  const q = t.quota || {};
+  let soonest = null;
+  for (const mode of ['auto','fast','expert','heavy','console','grok_4_3']) {
+    const win = q[mode];
+    const resetAt = win && (win.reset_at || win.resetAt);
+    if (!resetAt) continue;
+    const ts = new Date(resetAt).getTime();
+    if (Number.isNaN(ts)) continue;
+    if (soonest == null || ts < soonest) soonest = ts;
+  }
+  if (soonest == null) return { label: tr('account.na', null, '—'), tip: tr('account.na', null, '—') };
+  return { label: fmtResetDate(soonest), tip: fmtDate(soonest) };
+}
+
+
 function renderStats(view = getTokenView()) {
   const { stats } = view;
   $('s-total',   allTokens.length);
@@ -1435,37 +1596,8 @@ function renderStats(view = getTokenView()) {
   $('s-cooling', stats.cooling);
   $('s-invalid', stats.invalid);
   $('s-disabled', stats.disabled);
-  $('s-calls', fmt(stats.calls));
-  $('s-success', fmt(stats.success));
-  $('s-rate', fmtRate(stats.success, stats.fail));
-  if (!stats.sso && stats.oauth) {
-    const used = stats.oauthUsage.length ? Math.max(...stats.oauthUsage) : null;
-    const resetAt = stats.oauthPeriodEnds.length
-      ? stats.oauthPeriodEnds.reduce((a, b) => new Date(a) <= new Date(b) ? a : b)
-      : null;
-    const plans = Array.from(stats.oauthPlans);
-    setQuotaCard('auto', tr('account.oauthPlan', null, '订阅计划'), plans.join(' / ') || 'OAuth');
-    setQuotaCard('fast', tr('account.oauthPeriodUsed', null, '周期已用'), used == null ? tr('account.na', null, '—') : `${fmtPercent(used)}%`);
-    setQuotaCard('expert', tr('account.oauthPeriodRemaining', null, '周期剩余'), used == null ? tr('account.na', null, '—') : `${fmtPercent(100 - used)}%`);
-    setQuotaCard('heavy', tr('account.oauthPeriodReset', null, '重置时间'), resetAt ? fmtResetDate(resetAt) : tr('account.na', null, '—'));
-    setQuotaCard('console', tr('account.oauthLanguageModels', null, '语言模型'), stats.oauthModels.size || tr('account.na', null, '—'));
-  } else {
-    setQuotaCard('auto', tr('account.statAuto', null, 'Auto 余额'), fmt(stats.qa));
-    setQuotaCard('fast', tr('account.statFast', null, 'Fast 余额'), fmt(stats.qf));
-    setQuotaCard('expert', tr('account.statExpert', null, 'Expert 余额'), fmt(stats.qe));
-    setQuotaCard('heavy', tr('account.statHeavy', null, 'Heavy 余额'), fmt(stats.qh));
-    setQuotaCard('console', tr('account.statConsole', null, 'Console 余额'), fmt(stats.qc));
-  }
 }
 
-function setQuotaCard(mode, label, value) {
-  const card = document.querySelector(`[data-quota-card="${mode}"]`);
-  if (!card) return;
-  const labelEl = card.querySelector('.stat-label');
-  const valueEl = card.querySelector('.stat-num');
-  if (labelEl) labelEl.textContent = label;
-  if (valueEl) valueEl.textContent = value;
-}
 
 function renderFilters(view = getTokenView()) {
   renderStatusFilters(view);
@@ -1599,7 +1731,7 @@ function renderTable(view = getTokenView()) {
 
   document.getElementById('tbody').innerHTML = slice.length
     ? slice.map(rowHtml).join('')
-    : `<tr><td colspan="11" class="empty-state">${tr('account.empty', null, '暂无 Token，请点击右上角导入或添加。')}</td></tr>`;
+    : `<tr><td colspan="15" class="empty-state">${tr('account.empty', null, '暂无 Token，请点击右上角导入或添加。')}</td></tr>`;
 
   $('pagi-page', tr('account.pageIndicator', { current: total ? curPage : 0, total: pages }, `第 ${total ? curPage : 0} / ${pages} 页`));
   $('section-table-count', total);
@@ -1647,10 +1779,14 @@ function rowHtml(t) {
           <svg viewBox="0 0 24 24" stroke-width="1.8"><rect x="9" y="9" width="10" height="10" rx="2"/><path d="M7 15H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v1"/></svg>
         </button>
       </div></td>
-    <td class="table-center"><span class="badge badge-${isOauth ? 'oauth' : (t.pool||'basic')}">${xe(isOauth ? tr('account.pool.oauth', null, 'OAuth') : poolLabel(t.pool || 'basic'))}</span></td>
+    <td class="table-center"><span class="badge badge-${accountTier(t)}">${xe(tierLabel(accountTier(t)))}</span></td>
+    <td class="table-center"><span class="badge badge-${isOauth ? 'oauth' : 'sso'}">${xe(importLabel(isOauth ? 'oauth' : 'sso'))}</span></td>
     <td class="table-center">${statusBadge(t.status)}</td>
     <td class="table-center">${healthBadge(t)}</td>
-    <td data-quota-only><div class="quota-cell">${isOauth ? oauthQuotaHtml(t) : qpills(q)}</div></td>
+    <td data-quota-only><div class="quota-cell">${isOauth ? oauthPlanHtml(t) : qpills(q)}</div></td>
+    <td class="table-center" data-quota-only>${usageBarHtml(t)}</td>
+    <td class="table-center">${cacheRateBarHtml(t)}</td>
+    <td class="table-center" data-quota-only style="font-size:12px;color:#9a9a9a"><span data-tip="${xe(accountResetInfo(t).tip)}">${xe(accountResetInfo(t).label)}</span></td>
     <td class="table-center" style="font-variant-numeric:tabular-nums;color:#8f8f8f">${success}</td>
     <td class="table-center" style="font-variant-numeric:tabular-nums;color:#9a9a9a">${fail}</td>
     <td class="table-center" style="font-variant-numeric:tabular-nums;color:#9a9a9a">${fmtRate(success, fail)}</td>
@@ -1691,20 +1827,13 @@ function qpills(q) {
   }).join('');
 }
 
-function oauthQuotaHtml(t) {
-  const plan = t.oauth_plan || t.oauth_plan_raw || tr('account.pool.oauth', null, 'OAuth');
-  const rawUsage = Number(t.oauth_usage_percent);
-  const hasUsage = Number.isFinite(rawUsage);
-  const usage = hasUsage ? Math.max(0, Math.min(100, rawUsage)) : null;
-  const periodEnd = t.oauth_period_end ? fmtDate(t.oauth_period_end) : '';
-  const usageLabel = hasUsage
-    ? tr('account.oauthUsageUsed', { n: usage.toFixed(1).replace(/\.0$/, '') }, `已用 ${usage.toFixed(1).replace(/\.0$/, '')}%`)
-    : tr('account.oauthUsageUnknown', null, '额度未同步');
-  const tip = `${plan} · ${usageLabel}${periodEnd ? ` · ${tr('account.oauthResetsAt', { time: periodEnd }, `${periodEnd} 重置`)}` : ''}`;
-  return [
-    `<span class="q-pill q-oauth-plan" data-tip="${xe(tip)}">${xe(plan)}</span>`,
-    `<span class="q-pill ${hasUsage ? 'q-oauth-usage' : 'q-z'}" data-tip="${xe(tip)}">${xe(usageLabel)}</span>`,
-  ].join('');
+function oauthPlanHtml(t) {
+  const tier = accountTier(t);
+  const plan = t.oauth_plan || t.oauth_plan_raw || tierLabel(tier);
+  const usage = accountUsageInfo(t);
+  const reset = accountResetInfo(t);
+  const tip = `${plan} · ${usage.tip}${reset.label !== tr('account.na', null, '—') ? ` · ${reset.tip}` : ''}`;
+  return `<span class="q-pill q-oauth-plan" data-tip="${xe(tip)}">${xe(plan)}</span>`;
 }
 
 // ── Nav & Pagination ────────────────────────────────────────────────────────
@@ -1728,7 +1857,7 @@ function switchNsfw(mode) {
 }
 function switchPool(pool) {
   preserveScroll(() => {
-    curPool = pool || 'all';
+    curPool = ({ basic: 'free', oauth: 'all' }[pool] || pool || 'all');
     curPage = 1;
     sel.clear();
     renderFilters();

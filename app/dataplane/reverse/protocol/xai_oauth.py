@@ -35,7 +35,12 @@ _MAX_JSON_BYTES = 1 << 20
 _MAX_ERROR_BYTES = 4096
 
 
-def build_oauth_headers(*, access_token: str = "", model: str = "") -> dict[str, str]:
+def build_oauth_headers(
+    *,
+    access_token: str = "",
+    model: str = "",
+    conv_id: str = "",
+) -> dict[str, str]:
     headers = {
         "Accept": "application/json",
         "User-Agent": "grok-pager/0.2.93 grok-shell/0.2.93 (linux; x86_64)",
@@ -51,6 +56,8 @@ def build_oauth_headers(*, access_token: str = "", model: str = "") -> dict[str,
         )
     if model:
         headers["x-grok-model-override"] = model
+    if conv_id:
+        headers["x-grok-conv-id"] = str(conv_id)[:200]
     return headers
 
 
@@ -185,6 +192,7 @@ async def request_oauth_responses(
     *,
     url: str,
     timeout_s: float,
+    conv_id: str = "",
 ) -> dict[str, Any]:
     """Call a fixed xAI OAuth Responses endpoint and return one JSON response."""
     if url not in {BUILD_RESPONSES_URL, API_RESPONSES_URL}:
@@ -203,6 +211,7 @@ async def request_oauth_responses(
                     **build_oauth_headers(
                         access_token=access_token,
                         model=model if url == BUILD_RESPONSES_URL else "",
+                        conv_id=conv_id,
                     ),
                     "Content-Type": "application/json",
                 },
@@ -244,6 +253,7 @@ async def stream_oauth_responses(
     *,
     url: str,
     timeout_s: float,
+    conv_id: str = "",
 ) -> AsyncGenerator[str, None]:
     """Yield raw SSE lines from a fixed xAI OAuth Responses endpoint."""
     if url not in {BUILD_RESPONSES_URL, API_RESPONSES_URL}:
@@ -262,6 +272,7 @@ async def stream_oauth_responses(
                     **build_oauth_headers(
                         access_token=access_token,
                         model=model if url == BUILD_RESPONSES_URL else "",
+                        conv_id=conv_id,
                     ),
                     "Accept": "text/event-stream",
                     "Content-Type": "application/json",

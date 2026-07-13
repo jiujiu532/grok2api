@@ -438,7 +438,8 @@
       "basic": "Basic",
       "super": "Super",
       "heavy": "Heavy",
-      "oauth": "OAuth"
+      "oauth": "OAuth",
+      "free": "Free"
     },
     "mode": {
       "auto": "Auto",
@@ -453,7 +454,26 @@
       "disabled": "禁用",
       "expired": "过期",
       "invalid": "异常"
-    }
+    },
+    "colTier": "档位",
+    "colImport": "导入",
+    "statTierFree": "Free 账户",
+    "statTierSuper": "Super 账户",
+    "statTierHeavy": "Heavy 账户",
+    "tier": {
+      "free": "Free",
+      "super": "Super",
+      "heavy": "Heavy"
+    },
+    "importMethod": {
+      "oauth": "OAuth",
+      "sso": "SSO"
+    },
+    "colUsage": "已用",
+    "colReset": "重置",
+    "colCacheRate": "Cache",
+    "cacheRateUnknown": "尚无 cache 统计",
+    "cacheRateTip": "缓存 {cached}/{prompt} tokens · {rate}%"
   },
   "config": {
     "pageTitle": "Grok2API - 配置管理",

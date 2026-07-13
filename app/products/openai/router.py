@@ -266,6 +266,16 @@ async def chat_completions_endpoint(req: ChatCompletionRequest, request: Request
         if spec.is_oauth_chat() and req.model in oauth_models:
             from .grok_build import chat_completions as grok_build_chat
 
+            from app.products.openai.usage_cache import (
+                sticky_key_from_chat_messages,
+                sticky_key_from_headers,
+            )
+
+            sticky = (
+                sticky_key_from_headers(request.headers)
+                or str(getattr(req, "prompt_cache_key", None) or getattr(req, "user", None) or "").strip()
+                or sticky_key_from_chat_messages(req.model, messages)
+            )
             result = await grok_build_chat(
                 request.app.state.oauth_service,
                 model=req.model,
@@ -279,6 +289,7 @@ async def chat_completions_endpoint(req: ChatCompletionRequest, request: Request
                 reasoning_effort=req.reasoning_effort,
                 max_tokens=req.max_tokens,
                 timeout_s=cfg.get_float("chat.timeout", 120.0),
+                sticky_key=sticky,
             )
 
         elif spec.is_image_edit():
@@ -466,10 +477,20 @@ async def responses_endpoint(req: ResponsesCreateRequest, request: Request):
 
         payload = req.model_dump(exclude_none=True)
         payload["stream"] = is_stream
+        from app.products.openai.usage_cache import (
+            sticky_key_from_headers,
+            sticky_key_from_responses,
+        )
+
+        sticky = (
+            sticky_key_from_headers(request.headers)
+            or sticky_key_from_responses(payload)
+        )
         result = await grok_build_responses(
             request.app.state.oauth_service,
             payload,
             timeout_s=cfg.get_float("chat.timeout", 120.0),
+            sticky_key=sticky,
         )
     else:
         from .responses import create as responses_create

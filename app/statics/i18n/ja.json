@@ -306,7 +306,8 @@
       "autoRecommended": "自動判定（推奨）",
       "basic": "Basic",
       "super": "Super",
-      "heavy": "Heavy"
+      "heavy": "Heavy",
+      "free": "Free"
     },
     "mode": {
       "auto": "Auto",
@@ -321,7 +322,26 @@
       "disabled": "無効化",
       "expired": "期限切れ",
       "invalid": "異常"
-    }
+    },
+    "colTier": "Tier",
+    "colImport": "Import",
+    "statTierFree": "Free accounts",
+    "statTierSuper": "Super accounts",
+    "statTierHeavy": "Heavy accounts",
+    "tier": {
+      "free": "Free",
+      "super": "Super",
+      "heavy": "Heavy"
+    },
+    "importMethod": {
+      "oauth": "OAuth",
+      "sso": "SSO"
+    },
+    "colUsage": "Used",
+    "colReset": "Reset",
+    "colCacheRate": "Cache",
+    "cacheRateUnknown": "No cache stats yet",
+    "cacheRateTip": "Cached {cached}/{prompt} tokens · {rate}%"
   },
   "config": {
     "pageTitle": "Grok2API - 構成管理",

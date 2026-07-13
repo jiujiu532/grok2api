@@ -15,6 +15,11 @@ from app.dataplane.reverse.protocol.xai_oauth import (
     stream_oauth_responses,
 )
 from app.platform.errors import RateLimitError, UpstreamError
+from app.products.openai.usage_cache import (
+    extract_cached_tokens,
+    extract_prompt_tokens,
+    openai_usage_from_upstream,
+)
 
 _MAX_ACCOUNT_ATTEMPTS = 3
 _MISSING = object()
@@ -51,6 +56,15 @@ def _responses_url(lease, model: str) -> str:
     if model in lease.language_models or model in lease.api_models:
         return API_RESPONSES_URL
     raise UpstreamError(f"OAuth 账户不支持模型 {model!r}", status=404)
+
+
+
+def _with_cache_key(payload: dict[str, Any], sticky_key: str) -> dict[str, Any]:
+    body = dict(payload)
+    key = str(body.get("prompt_cache_key") or sticky_key or "").strip()
+    if key:
+        body["prompt_cache_key"] = key[:200]
+    return body
 
 
 def _upstream_payload(payload: dict[str, Any], url: str) -> dict[str, Any]:
@@ -165,13 +179,15 @@ async def _json_with_failover(
     payload: dict[str, Any],
     *,
     timeout_s: float,
+    sticky_key: str = "",
 ) -> dict[str, Any]:
     excluded: set[str] = set()
     last_error: UpstreamError | None = None
     model = str(payload.get("model") or "")
+    sticky = str(sticky_key or payload.get("prompt_cache_key") or "").strip()
     for _ in range(_MAX_ACCOUNT_ATTEMPTS):
         try:
-            lease = await service.acquire(model=model, exclude=excluded)
+            lease = await service.acquire(model=model, exclude=excluded, sticky_key=sticky)
         except RateLimitError:
             if last_error is not None:
                 raise last_error
@@ -181,13 +197,20 @@ async def _json_with_failover(
             while True:
                 try:
                     url = _responses_url(lease, model)
+                    body = _with_cache_key(_upstream_payload(payload, url), sticky)
                     result = await request_oauth_responses(
                         lease.access_token,
-                        _upstream_payload(payload, url),
+                        body,
                         url=url,
                         timeout_s=timeout_s,
+                        conv_id=sticky,
                     )
-                    await service.success(lease)
+                    usage = result.get("usage") if isinstance(result, dict) else None
+                    await service.success(
+                        lease,
+                        prompt_tokens=extract_prompt_tokens(usage if isinstance(usage, dict) else None),
+                        cached_tokens=extract_cached_tokens(usage if isinstance(usage, dict) else None),
+                    )
                     return result
                 except UpstreamError as exc:
                     last_error = exc
@@ -222,13 +245,15 @@ async def _stream_with_failover(
     payload: dict[str, Any],
     *,
     timeout_s: float,
+    sticky_key: str = "",
 ) -> AsyncGenerator[str, None]:
     excluded: set[str] = set()
     last_error: UpstreamError | None = None
     model = str(payload.get("model") or "")
+    sticky = str(sticky_key or payload.get("prompt_cache_key") or "").strip()
     for _ in range(_MAX_ACCOUNT_ATTEMPTS):
         try:
-            lease = await service.acquire(model=model, exclude=excluded)
+            lease = await service.acquire(model=model, exclude=excluded, sticky_key=sticky)
         except RateLimitError:
             if last_error is not None:
                 raise last_error
@@ -239,15 +264,61 @@ async def _stream_with_failover(
             while True:
                 try:
                     url = _responses_url(lease, model)
+                    body = _with_cache_key(_upstream_payload(payload, url), sticky)
+                    # capture usage from completed SSE event for cache stats
+                    usage_holder: dict[str, Any] = {}
+                    sse_event = ""
+                    sse_data: list[str] = []
+
+                    def _ingest_sse_payload(raw: str) -> None:
+                        if not raw or raw == "[DONE]":
+                            return
+                        try:
+                            evt = orjson.loads(raw)
+                        except orjson.JSONDecodeError:
+                            return
+                        if not isinstance(evt, dict):
+                            return
+                        # event name may be outside JSON; type field is also common
+                        kind = str(evt.get("type") or sse_event or "")
+                        if kind == "response.completed" and isinstance(evt.get("response"), dict):
+                            u = evt["response"].get("usage")
+                            if isinstance(u, dict):
+                                usage_holder.update(u)
+                        elif isinstance(evt.get("usage"), dict):
+                            usage_holder.update(evt["usage"])
+                        elif isinstance(evt.get("response"), dict) and isinstance(
+                            evt["response"].get("usage"), dict
+                        ):
+                            usage_holder.update(evt["response"]["usage"])
+
                     async for line in stream_oauth_responses(
                         lease.access_token,
-                        _upstream_payload(payload, url),
+                        body,
                         url=url,
                         timeout_s=timeout_s,
+                        conv_id=sticky,
                     ):
                         sent = True
+                        if not line:
+                            if sse_data:
+                                _ingest_sse_payload("\n".join(sse_data))
+                            sse_event, sse_data = "", []
+                        elif line.startswith("event:"):
+                            sse_event = line[6:].strip()
+                        elif line.startswith("data:"):
+                            sse_data.append(line[5:].strip())
+                        else:
+                            # some proxies yield bare JSON lines
+                            _ingest_sse_payload(line.strip())
                         yield line
-                    await service.success(lease)
+                    if sse_data:
+                        _ingest_sse_payload("\n".join(sse_data))
+                    await service.success(
+                        lease,
+                        prompt_tokens=extract_prompt_tokens(usage_holder or None),
+                        cached_tokens=extract_cached_tokens(usage_holder or None),
+                    )
                     return
                 except UpstreamError as exc:
                     last_error = exc
@@ -294,6 +365,8 @@ def _responses_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "previous_response_id",
         "metadata",
         "truncation",
+        "prompt_cache_key",
+        "user",
     }
     body = {key: value for key, value in payload.items() if key in allowed and value is not None}
     reasoning = body.get("reasoning")
@@ -341,15 +414,23 @@ async def responses(
     payload: dict[str, Any],
     *,
     timeout_s: float,
+    sticky_key: str = "",
 ) -> dict[str, Any] | AsyncGenerator[str, None]:
     body = _responses_payload(payload)
+    sticky = str(sticky_key or body.get("prompt_cache_key") or "").strip()
+    if sticky:
+        body["prompt_cache_key"] = sticky[:200]
     if body.get("stream"):
         async def _stream() -> AsyncGenerator[str, None]:
-            async for line in _stream_with_failover(service, body, timeout_s=timeout_s):
+            async for line in _stream_with_failover(
+                service, body, timeout_s=timeout_s, sticky_key=sticky
+            ):
                 yield f"{line}\n"
 
         return _stream()
-    return await _json_with_failover(service, body, timeout_s=timeout_s)
+    return await _json_with_failover(
+        service, body, timeout_s=timeout_s, sticky_key=sticky
+    )
 
 
 def _chat_content(content: Any) -> Any:
@@ -508,8 +589,6 @@ def _message_from_response(response: dict[str, Any]) -> tuple[dict[str, Any], st
 def _chat_response(response: dict[str, Any], model: str) -> dict[str, Any]:
     message, finish_reason = _message_from_response(response)
     usage = response.get("usage") if isinstance(response.get("usage"), dict) else {}
-    prompt_tokens = int(usage.get("input_tokens") or usage.get("prompt_tokens") or 0)
-    completion_tokens = int(usage.get("output_tokens") or usage.get("completion_tokens") or 0)
     return {
         "id": str(response.get("id") or f"chatcmpl_{uuid.uuid4().hex[:24]}"),
         "object": "chat.completion",
@@ -522,11 +601,7 @@ def _chat_response(response: dict[str, Any], model: str) -> dict[str, Any]:
                 "finish_reason": finish_reason,
             }
         ],
-        "usage": {
-            "prompt_tokens": prompt_tokens,
-            "completion_tokens": completion_tokens,
-            "total_tokens": int(usage.get("total_tokens") or prompt_tokens + completion_tokens),
-        },
+        "usage": openai_usage_from_upstream(usage),
     }
 
 
@@ -565,6 +640,7 @@ async def _chat_stream(
     model: str,
     timeout_s: float,
     emit_think: bool,
+    sticky_key: str = "",
 ) -> AsyncGenerator[str, None]:
     response_id = f"chatcmpl_{uuid.uuid4().hex[:24]}"
     created = int(time.time())
@@ -575,7 +651,7 @@ async def _chat_stream(
     usage: dict[str, Any] = {}
 
     async for event, payload in _events(
-        _stream_with_failover(service, body, timeout_s=timeout_s)
+        _stream_with_failover(service, body, timeout_s=timeout_s, sticky_key=sticky_key)
     ):
         if event == "response.created":
             response = payload.get("response")
@@ -703,13 +779,7 @@ def _chat_chunk(
         ],
     }
     if usage:
-        prompt = int(usage.get("input_tokens") or usage.get("prompt_tokens") or 0)
-        completion = int(usage.get("output_tokens") or usage.get("completion_tokens") or 0)
-        chunk["usage"] = {
-            "prompt_tokens": prompt,
-            "completion_tokens": completion,
-            "total_tokens": int(usage.get("total_tokens") or prompt + completion),
-        }
+        chunk["usage"] = openai_usage_from_upstream(usage)
     return f"data: {orjson.dumps(chunk).decode()}\n\n"
 
 
@@ -727,6 +797,7 @@ async def chat_completions(
     reasoning_effort: str | None,
     max_tokens: int | None,
     timeout_s: float,
+    sticky_key: str = "",
 ) -> dict[str, Any] | AsyncGenerator[str, None]:
     body = _chat_to_responses(
         model=model,
@@ -739,6 +810,9 @@ async def chat_completions(
         reasoning_effort=reasoning_effort,
         max_tokens=max_tokens,
     )
+    sticky = str(sticky_key or "").strip()
+    if sticky:
+        body["prompt_cache_key"] = sticky[:200]
     if stream:
         return _chat_stream(
             service,
@@ -746,9 +820,10 @@ async def chat_completions(
             model=model,
             timeout_s=timeout_s,
             emit_think=emit_think,
+            sticky_key=sticky,
         )
     return _chat_response(
-        await _json_with_failover(service, body, timeout_s=timeout_s),
+        await _json_with_failover(service, body, timeout_s=timeout_s, sticky_key=sticky),
         model,
     )
 
