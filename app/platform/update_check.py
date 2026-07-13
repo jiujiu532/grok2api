@@ -320,7 +320,20 @@ async def _fetch_update_info() -> dict[str, Any]:
             # still may be behind if local HEAD differs from upstream; prefer HEAD comparison
             pass
         if sha and local_commit:
-            update_available = sha != local_commit and not local_commit.startswith(sha)
+            # Local may be ahead of origin/main (common for private forks).
+            # Only report update when remote tip is NOT already an ancestor of HEAD.
+            try:
+                proc = subprocess.run(
+                    ["git", "merge-base", "--is-ancestor", sha, "HEAD"],
+                    cwd=str(_ROOT),
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                    timeout=10,
+                )
+                update_available = proc.returncode != 0
+            except Exception:
+                update_available = sha != local_commit and not local_commit.startswith(sha)
         notes = (
             "上游仓库当前没有 GitHub Release / Tag，已回退到默认分支最新提交。\n\n"
             f"- 分支: `{default_branch}`\n"
