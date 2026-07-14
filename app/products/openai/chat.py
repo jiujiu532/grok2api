@@ -412,6 +412,9 @@ async def _stream_chat(
     )
     session_kwargs = build_session_kwargs(lease=lease)
 
+    from app.control.proxy.models import ProxyFeedback, ProxyFeedbackKind
+    from app.dataplane.reverse.transport._proxy_feedback import upstream_feedback
+
     async with ResettableSession(**session_kwargs) as session:
         try:
             response = await session.post(
@@ -422,6 +425,9 @@ async def _stream_chat(
                 stream=True,
             )
         except Exception as exc:
+            await proxy.feedback(
+                lease, ProxyFeedback(kind=ProxyFeedbackKind.TRANSPORT_ERROR)
+            )
             raise _transport_upstream_error(
                 exc, context="Chat transport failed"
             ) from exc
@@ -431,19 +437,31 @@ async def _stream_chat(
                 body = response.content.decode("utf-8", "replace")[:400]
             except Exception:
                 body = ""
-            raise UpstreamError(
+            err = UpstreamError(
                 f"Chat upstream returned {response.status_code}",
                 status=response.status_code,
                 body=body,
             )
+            # 关键：反馈失败，触发 PROXY_POOL 节点轮换 + CF clearance 失效重取。
+            # 缺失此反馈会让聊天流量在被 Cloudflare 拦截时死磕同一出口 IP。
+            await proxy.feedback(lease, upstream_feedback(err))
+            raise err
 
         try:
             async for line in response.aiter_lines():
                 yield line
         except Exception as exc:
+            await proxy.feedback(
+                lease, ProxyFeedback(kind=ProxyFeedbackKind.TRANSPORT_ERROR)
+            )
             raise _transport_upstream_error(
                 exc, context="Chat stream read failed"
             ) from exc
+        else:
+            # 流正常读完 → 成功反馈（维持当前出口节点/clearance 的健康标记）。
+            await proxy.feedback(
+                lease, ProxyFeedback(kind=ProxyFeedbackKind.SUCCESS, status_code=200)
+            )
 
 
 async def completions(
