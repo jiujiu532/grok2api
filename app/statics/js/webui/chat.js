@@ -1429,12 +1429,15 @@
     messages
       .filter((message) => message && (message.role === 'user' || message.role === 'assistant'))
       .forEach((message) => outgoing.push(message));
+    const session = getCurrentSession();
+    const cacheKey = session && session.id ? String(session.id) : '';
     return {
       model: modelSelect.value || PREFERRED_MODEL,
       messages: outgoing,
       stream: true,
       temperature: 0.8,
       top_p: 0.95,
+      ...(cacheKey ? { prompt_cache_key: cacheKey, user: cacheKey } : {}),
     };
   }
 
@@ -1506,9 +1509,12 @@
     setStatus(text('webui.chat.statusConnecting', 'Connecting...'));
 
     try {
+      const session = getCurrentSession();
+      const cacheKey = session && session.id ? String(session.id) : '';
       const headers = {
         'Content-Type': 'application/json',
         ...(await getAuthHeaders()),
+        ...(cacheKey ? { 'x-grok-conv-id': cacheKey } : {}),
       };
       const res = await fetch(CHAT_ENDPOINT, {
         method: 'POST',

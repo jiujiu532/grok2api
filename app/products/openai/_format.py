@@ -21,20 +21,27 @@ def make_response_id() -> str:
     return f"chatcmpl-{int(time.time() * 1000)}{os.urandom(4).hex()}"
 
 
-def build_usage(prompt_tokens: int, completion_tokens: int, *, reasoning_tokens: int = 0) -> dict:
+def build_usage(
+    prompt_tokens: int,
+    completion_tokens: int,
+    *,
+    reasoning_tokens: int = 0,
+    cached_tokens: int = 0,
+) -> dict:
     pt = max(0, prompt_tokens)
     ct = max(0, completion_tokens)
     rt = max(0, reasoning_tokens)
+    cached = max(0, min(int(cached_tokens or 0), pt))
     return {
         "prompt_tokens":     pt,
         "completion_tokens": ct,
         "total_tokens":      pt + ct,
         "prompt_tokens_details": {
-            "cached_tokens": 0, "text_tokens": pt,
+            "cached_tokens": cached, "text_tokens": pt,
             "audio_tokens":  0, "image_tokens": 0,
         },
         "completion_tokens_details": {
-            "text_tokens": ct - rt, "audio_tokens": 0, "reasoning_tokens": rt,
+            "text_tokens": max(0, ct - rt), "audio_tokens": 0, "reasoning_tokens": rt,
         },
     }
 

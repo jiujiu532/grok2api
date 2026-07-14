@@ -8,26 +8,7 @@
   <link href="https://cdn.jsdelivr.net/npm/geist@1.0.0/dist/fonts/geist-sans/style.css" rel="stylesheet">
   <link href="/static/css/app.css?v={{APP_VERSION}}" rel="stylesheet">
   <style>
-    body { background: #FAF9F5 }
-
-    /* Page header */
-    .page-hd   { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:20px }
-    .page-title{ font-size:22px; font-weight:700; line-height:1.2 }
-    .page-sub  { font-size:13px; color:var(--fg-muted); margin-top:5px }
-    .page-actions { display:flex; gap:8px; align-items:center; flex-shrink:0 }
-
-    .page-action-btn {
-      height:32px; padding:0 14px; border-radius:999px;
-      display:inline-flex; align-items:center; justify-content:center; gap:6px;
-      font-size:13px; font-weight:600;
-      border:1px solid #e6e6e6; background:#fafafa; color:#444;
-    }
-    .page-action-btn:hover { background:#f3f3f3; border-color:#dcdcdc }
-    .page-action-btn-primary { background:#111; border-color:#111; color:#fff }
-    .page-action-btn-primary:hover { background:#222; border-color:#222 }
-    .page-action-btn:disabled { opacity:.4; pointer-events:none }
-
-    /* Section nav tabs */
+/* Section nav tabs */
     .cfg-nav {
       display:flex;
       align-items:center;
@@ -1354,7 +1335,7 @@ function doReset() {
     await renderAdminHeader?.();
     await renderSiteFooter?.();
     const key = await adminKey.get();
-    if (!key || !await verifyKey(ADMIN_API + '/verify', key).catch(() => false))
+    if (!await keepAdminSession(ADMIN_API + '/verify', key))
       return location.href = '/admin/login';
     await load();
   } catch (e) {

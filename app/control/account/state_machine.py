@@ -133,6 +133,11 @@ def is_manageable(record: AccountRecord, *, now: int | None = None) -> bool:
     return status in (AccountStatus.ACTIVE, AccountStatus.COOLING)
 
 
+def is_sso_maintainable(record: AccountRecord, *, now: int | None = None) -> bool:
+    """Return True for a Grok web SSO account usable by SSO-only maintenance."""
+    return "oauth" not in record.tags and is_manageable(record, now=now)
+
+
 # ---------------------------------------------------------------------------
 # State transition
 # ---------------------------------------------------------------------------
@@ -328,6 +333,7 @@ __all__ = [
     "derive_status",
     "is_selectable",
     "is_manageable",
+    "is_sso_maintainable",
     "apply_feedback",
     "clear_failures",
 ]

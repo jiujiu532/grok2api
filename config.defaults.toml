@@ -6,6 +6,10 @@ app_key = "grok2api"
 app_url = ""
 # API 调用密钥
 api_key = ""
+# GitHub Token（可选）：用于检查更新，把匿名 60 次/小时提升到约 5000 次/小时
+# 也可用环境变量 GITHUB_TOKEN / GH_TOKEN / GROK2API_GITHUB_TOKEN
+# 权限：public repo 只读，或 fine-grained Contents: Read
+github_token = ""
 # 启用 WebUI
 webui_enabled = false
 # WebUI 访问密码

@@ -300,6 +300,94 @@ class AccountDirectory:
     def revision(self) -> int:
         return self._table.revision if self._table else 0
 
+    async def diagnostics(self) -> dict[str, object]:
+        """Return an aggregate snapshot without exposing account tokens."""
+        table = self._table
+        if table is None:
+            return {
+                "total": 0,
+                "status": {},
+                "pools": {},
+                "auth_types": {},
+                "quota_remaining": {},
+                "health_bands": {},
+                "inflight": 0,
+                "average_health": 0.0,
+                "revision": 0,
+            }
+
+        status_counts = {
+            "active": 0,
+            "cooling": 0,
+            "expired": 0,
+            "disabled": 0,
+        }
+        pool_counts = {"basic": 0, "super": 0, "heavy": 0, "oauth": 0}
+        auth_types = {"sso": 0, "oauth": 0}
+        quota_names = ("auto", "fast", "expert", "heavy", "grok_4_3", "console")
+        quota_remaining = dict.fromkeys(quota_names, 0)
+        health_bands = {"healthy": 0, "warning": 0, "critical": 0, "disabled": 0}
+        inflight = 0
+        health_total = 0.0
+
+        # ponytail: O(n) under the existing lock; cache counters only if
+        # dashboard polling becomes measurable selection contention.
+        async with self._lock:
+            oauth_indices = table.tag_idx.get("oauth", set())
+            for idx in table.iter_live_indices():
+                status_id = int(table.status_by_idx[idx])
+                is_active = status_id == int(StatusId.ACTIVE)
+                if is_active:
+                    status_counts["active"] += 1
+                elif status_id == int(StatusId.COOLING):
+                    status_counts["cooling"] += 1
+                elif status_id == int(StatusId.EXPIRED):
+                    status_counts["expired"] += 1
+                elif status_id == int(StatusId.DISABLED):
+                    status_counts["disabled"] += 1
+
+                health = float(table.health_by_idx[idx])
+                failures = int(table.fail_count_by_idx[idx])
+                if status_id == int(StatusId.DISABLED):
+                    health_bands["disabled"] += 1
+                elif status_id == int(StatusId.EXPIRED):
+                    health_bands["critical"] += 1
+                elif status_id == int(StatusId.COOLING) or failures or health < 0.8:
+                    health_bands["warning"] += 1
+                else:
+                    health_bands["healthy"] += 1
+
+                if idx in oauth_indices:
+                    pool_counts["oauth"] += 1
+                    auth_types["oauth"] += 1
+                else:
+                    pool = POOL_ID_TO_STR.get(int(table.pool_by_idx[idx]), "basic")
+                    pool_counts[pool] = pool_counts.get(pool, 0) + 1
+                    auth_types["sso"] += 1
+                inflight += int(table.inflight_by_idx[idx])
+                health_total += health
+                if is_active:
+                    for mode_id, name in enumerate(quota_names):
+                        quota_remaining[name] += max(
+                            0,
+                            table.quota_for(idx, mode_id),
+                        )
+
+            total = table.size
+            revision = table.revision
+
+        return {
+            "total": total,
+            "status": status_counts,
+            "pools": pool_counts,
+            "auth_types": auth_types,
+            "quota_remaining": quota_remaining,
+            "health_bands": health_bands,
+            "inflight": inflight,
+            "average_health": round(health_total / total, 3) if total else 0.0,
+            "revision": revision,
+        }
+
 
 # ---------------------------------------------------------------------------
 # Helpers

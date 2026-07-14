@@ -4,7 +4,7 @@ Extracted from ProxyDirectory.acquire() to formalize the dataplane separation.
 """
 
 from app.control.proxy.models import (
-    EgressMode, EgressNode, EgressNodeState,
+    EgressMode,
     ProxyScope, RequestKind,
 )
 from .table import ProxyRuntimeTable

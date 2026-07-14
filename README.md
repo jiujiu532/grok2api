@@ -46,7 +46,8 @@
 | 免费账号 | 支持 `console.x.ai` SSO Token，`*-console` 模型零成本使用 |
 | 媒体生成 | 文生图、图像编辑、文生视频、图生视频，本地缓存与代理链接 |
 | 防封内置 | `x-statsig-id` 兼容修复，WARP + FlareSolverr 一键部署 |
-| 管理后台 | Admin 配置、账号管理、Web Chat、Masonry 画廊、ChatKit 语音 |
+| 管理后台 | 仪表盘、Admin 配置、账号管理、Web Chat、Masonry 画廊、ChatKit 语音 |
+| 可观测性 | API 请求 ID、流式全生命周期耗时、近 30 分钟请求与延迟趋势 |
 
 ---
 
@@ -232,6 +233,8 @@ uv run granian --interface asgi --host 0.0.0.0 --port 8000 --workers 1 app.main:
 3. `app.app_url` — 公网地址（图片/视频链接需要）
 
 > 配置保存即时生效，无需重启。
+>
+> 登录后默认进入 `/admin/dashboard`。仪表盘的请求统计按 Granian 进程计算，服务重启后重新计数；多 worker 部署时显示当前命中的 worker。
 
 ---
 
@@ -324,6 +327,8 @@ basic表示free账号，spuer和heavy 为付费
 | `POST /v1/images/edits` | 图像编辑 |
 | `POST /v1/videos` | 异步视频任务 |
 | `GET /v1/videos/{id}` / `{id}/content` | 查询 / 下载视频 |
+
+所有 HTTP 响应都会返回 `X-Request-ID`。客户端可主动传入同名请求头并在日志中按该 ID 定位请求；非法或可能污染日志的 ID 会被服务端替换。浏览器跨域调用也可读取该响应头。
 
 ---
 

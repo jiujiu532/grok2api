@@ -36,7 +36,7 @@ def _record_to_slot_args(record: AccountRecord) -> dict:
     grok_4_3_w = qs.grok_4_3
     console_w = qs.console
     # fmt: off
-    return dict(
+    args = dict(
         pool_id         = pool_id,
         status_id       = status_id,
         quota_auto      = max(0, qs.auto.remaining),
@@ -70,6 +70,38 @@ def _record_to_slot_args(record: AccountRecord) -> dict:
         tags            = record.tags,
     )
     # fmt: on
+    if "oauth" in record.tags:
+        for key in (
+            "quota_auto",
+            "quota_fast",
+            "quota_expert",
+            "quota_heavy",
+            "quota_grok_4_3",
+            "quota_console",
+        ):
+            args[key] = -1
+        for key in (
+            "total_auto",
+            "total_fast",
+            "total_expert",
+            "total_heavy",
+            "total_grok_4_3",
+            "total_console",
+            "window_auto",
+            "window_fast",
+            "window_expert",
+            "window_heavy",
+            "window_grok_4_3",
+            "window_console",
+            "reset_auto",
+            "reset_fast",
+            "reset_expert",
+            "reset_heavy",
+            "reset_grok_4_3",
+            "reset_console",
+        ):
+            args[key] = 0
+    return args
 
 
 async def bootstrap(repository: AccountRepository) -> AccountRuntimeTable:

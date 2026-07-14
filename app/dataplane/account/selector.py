@@ -29,6 +29,7 @@ _W_FAIL     = 4.0
 _RECENT_WINDOW_S = 60  # seconds — 覆盖 grok-4-3 思考时长（典型 30-60s），强制账号轮换
 _QUOTA_MAX_INFLIGHT = 12  # quota 策略下单账号最多 12 个并发请求，防止单账号堆积引发上游风控
 _RANDOM_MAX_FAILS = 5  # random 策略下，累计失败 >= 5 次的账号暂时不选（D2 修复）
+_RANDOM_FAIL_RECOVERY_S = 300  # random 策略下，失败回避窗口（秒）：距上次失败超过此时长即重新纳入，避免账号被历史失败计数永久饿死
 
 
 # ---------------------------------------------------------------------------
@@ -312,19 +313,32 @@ def _random_select(
     cooling_col  = table.cooling_until_s_by_idx
     inflight_col = table.inflight_by_idx
     fail_col     = table.fail_count_by_idx
+    last_fail_col = table.last_fail_at_by_idx
 
     working = candidates.copy()
     if exclude_idxs:
         working -= exclude_idxs
-    # D2 修复：累计失败 >= _RANDOM_MAX_FAILS 的账号暂时排除，避免重复打到刚失败的账号
-    working = {
+    # cooling / inflight 是硬约束（429 冷却未到 + 单号并发上限），必须始终生效。
+    hard_ok = {
         idx for idx in working
         if int(cooling_col[idx]) <= now_s
         and int(inflight_col[idx]) < max_inflight
-        and int(fail_col[idx]) < _RANDOM_MAX_FAILS
     }
-    if not working:
+    if not hard_ok:
         return None
+    # D2：高失败账号“软回避”，而非永久硬排除。
+    # fail_count 是终身累计计数器（成功不清零，且每 30s 被 DB usage_fail_count 覆盖），
+    # 若继续当作永久阈值会让账号池慢性枯竭。改为只回避“近期仍在失败”的账号：
+    # 累计失败达标且距上次失败在恢复窗口内才回避；窗口过后自动重新纳入。
+    recent_bad = {
+        idx for idx in hard_ok
+        if int(fail_col[idx]) >= _RANDOM_MAX_FAILS
+        and (now_s - int(last_fail_col[idx])) < _RANDOM_FAIL_RECOVERY_S
+    }
+    working = hard_ok - recent_bad
+    # 全部账号都近期失败时，回退到硬约束集合，保证服务不因软回避而整池不可用。
+    if not working:
+        working = hard_ok
 
     if prefer_tag_idxs:
         preferred = working & prefer_tag_idxs

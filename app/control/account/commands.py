@@ -51,6 +51,7 @@ class AccountPatch(BaseModel):
     state_reason:     str | None             = None
     ext_merge:        dict[str, Any] | None  = None
     clear_failures:   bool                   = False
+    clear_deleted:    bool                   = False
 
 
 class ListAccountsQuery(BaseModel):

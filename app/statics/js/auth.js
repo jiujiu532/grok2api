@@ -48,5 +48,15 @@ async function verifyKey(url, key) {
   return (await fetch(url, { headers: key ? { Authorization: `Bearer ${key}` } : {} })).ok;
 }
 
+async function keepAdminSession(url, key) {
+  if (!key) return false;
+  try {
+    const response = await fetch(url, { headers: { Authorization: `Bearer ${key}` } });
+    return response.status !== 401 && response.status !== 403;
+  } catch {
+    return true;
+  }
+}
+
 function adminLogout() { adminKey.clear(); webuiKey.clear(); location.href='/admin/login'; }
 function webuiLogout() { webuiKey.clear(); location.href='/webui/login'; }

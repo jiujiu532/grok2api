@@ -20,7 +20,8 @@ Grok2API is a **FastAPI**-based Grok gateway that exposes Grok's web capabilitie
 - Multi-account pool, tiered selection, failure feedback, quota sync and auto maintenance
 - Local image / video caching with reverse-proxied URLs
 - Text-to-image, image edit, text-to-video, image-to-video
-- Built-in Admin console, Web Chat, Masonry image gallery, ChatKit voice page
+- Built-in dashboard, Admin console, Web Chat, Masonry image gallery, ChatKit voice page
+- Request IDs, full streaming-response latency, and process-local 30-minute request/latency trends
 - `console.x.ai` free account support with a dedicated `*-console` model family
 
 <br>
@@ -162,6 +163,7 @@ After enabling the reverse proxy, set `app.app_url` to `https://your.domain.com`
 | Page | Path |
 | :-- | :-- |
 | Admin login | `/admin/login` |
+| Dashboard | `/admin/dashboard` |
 | Account management | `/admin/account` |
 | Config management | `/admin/config` |
 | Cache management | `/admin/cache` |
@@ -301,6 +303,8 @@ Runtime config can also be overridden via `GROK_`-prefixed env vars, e.g. `GROK_
 | `GET /v1/videos/{video_id}/content` | yes | Download the final video |
 | `GET /v1/files/video?id=...` | no | Locally cached video |
 | `GET /v1/files/image?id=...` | no | Locally cached image |
+
+Every HTTP response includes `X-Request-ID`. Clients may supply the same request header and use it to correlate server logs; unsafe IDs are replaced. The header is also exposed to browser CORS clients. Dashboard request counters are process-local, reset on restart, and represent the worker that served the dashboard request.
 
 <br>
 

@@ -21,7 +21,7 @@ from app.platform.logging.logger import logger
 from app.platform.runtime.batch import run_batch
 from app.platform.runtime.task import create_task, expire_task, get_task
 from app.control.account.commands import AccountPatch, ListAccountsQuery
-from app.control.account.state_machine import is_manageable
+from app.control.account.state_machine import is_sso_maintainable
 
 if TYPE_CHECKING:
     from app.control.account.refresh import AccountRefreshService
@@ -56,7 +56,7 @@ async def _list_all_tokens(repo: "AccountRepository") -> list[str]:
     page_num, tokens = 1, []
     while True:
         page = await repo.list_accounts(ListAccountsQuery(page=page_num, page_size=2000))
-        tokens.extend(r.token for r in page.items if is_manageable(r))
+        tokens.extend(r.token for r in page.items if is_sso_maintainable(r))
         if page_num >= page.total_pages or not page.items:
             break
         page_num += 1
@@ -67,7 +67,11 @@ async def _filter_manageable_tokens(repo: "AccountRepository", tokens: list[str]
     unique_tokens = list(dict.fromkeys(tokens))
     records = await repo.get_accounts(unique_tokens)
     by_token = {r.token: r for r in records}
-    return [token for token in unique_tokens if (record := by_token.get(token)) and is_manageable(record)]
+    return [
+        token
+        for token in unique_tokens
+        if (record := by_token.get(token)) and is_sso_maintainable(record)
+    ]
 
 
 def _json(data: Any, status_code: int = 200) -> Response:

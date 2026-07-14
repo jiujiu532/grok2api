@@ -51,6 +51,10 @@ class ModelSpec:
         """通过 console.x.ai/v1/responses 路由的模型。"""
         return bool(self.capability & Capability.CONSOLE_CHAT)
 
+    def is_oauth_chat(self) -> bool:
+        """通过 Grok Build OAuth Responses 路由的模型。"""
+        return bool(self.capability & Capability.OAUTH_CHAT)
+
     def pool_name(self) -> str:
         """Return the canonical pool string for this tier."""
         if self.tier == Tier.SUPER:

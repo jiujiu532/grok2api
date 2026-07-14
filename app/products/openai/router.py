@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse, FileResponse
 
 from app.control.account.state_machine import is_manageable
+from app.control.account.oauth import is_oauth_manageable, oauth_model_ids
 from app.platform.auth.middleware import verify_api_key
 from app.platform.errors import AppError, ValidationError
 from app.platform.logging.logger import logger
@@ -36,18 +37,39 @@ _TAG_VIDEOS = "OpenAI - Videos"
 _TAG_FILES = "OpenAI - Files"
 
 
-async def _available_pools(request: Request) -> frozenset[str]:
+async def _available_accounts(
+    request: Request,
+) -> tuple[frozenset[str], frozenset[str]]:
     repo = getattr(request.app.state, "repository", None)
     if repo is None:
-        return frozenset()
+        return frozenset(), frozenset()
 
     snapshot = await repo.runtime_snapshot()
-    pools = {record.pool for record in snapshot.items if is_manageable(record)}
-    return frozenset(pools)
+    pools = {
+        record.pool
+        for record in snapshot.items
+        if is_manageable(record) and "oauth" not in record.tags
+    }
+    oauth_models = {
+        model
+        for record in snapshot.items
+        if is_oauth_manageable(record)
+        for model in oauth_model_ids(record)
+    }
+    return frozenset(pools), frozenset(oauth_models)
 
 
-def _model_available_for_pools(spec: ModelSpec, pools: frozenset[str]) -> bool:
+def _model_available(
+    spec: ModelSpec,
+    pools: frozenset[str],
+    *,
+    oauth_models: frozenset[str],
+) -> bool:
     if not spec.enabled:
+        return False
+    if spec.is_oauth_chat() and spec.model_name in oauth_models:
+        return True
+    if spec.is_oauth_chat() and not spec.is_chat():
         return False
     for pool_id in spec.pool_candidates():
         pool = _POOL_ID_TO_NAME[pool_id]
@@ -65,7 +87,7 @@ def _model_available_for_pools(spec: ModelSpec, pools: frozenset[str]) -> bool:
 async def list_models(request: Request):
     import time
 
-    pools = await _available_pools(request)
+    pools, oauth_models = await _available_accounts(request)
     models = [
         {
             "id": m.model_name,
@@ -75,7 +97,7 @@ async def list_models(request: Request):
             "name": m.public_name,
         }
         for m in model_registry.list_enabled()
-        if _model_available_for_pools(m, pools)
+        if _model_available(m, pools, oauth_models=oauth_models)
     ]
     return JSONResponse({"object": "list", "data": models})
 
@@ -87,8 +109,8 @@ async def get_model_endpoint(model_id: str, request: Request):
     import time
 
     spec = model_registry.get(model_id)
-    pools = await _available_pools(request)
-    if spec is None or not _model_available_for_pools(spec, pools):
+    pools, oauth_models = await _available_accounts(request)
+    if spec is None or not _model_available(spec, pools, oauth_models=oauth_models):
         return JSONResponse(
             {
                 "error": {
@@ -124,8 +146,9 @@ async def _safe_sse(stream: AsyncIterable[str]) -> AsyncGenerator[str, None]:
         yield f"event: error\ndata: {payload}\n\n"
         yield "data: [DONE]\n\n"
     except Exception as exc:
+        logger.exception("chat stream failed: error={}", exc)
         payload = orjson.dumps(
-            {"error": {"message": str(exc), "type": "server_error"}}
+            {"error": {"message": "Internal server error", "type": "server_error"}}
         ).decode()
         yield f"event: error\ndata: {payload}\n\n"
         yield "data: [DONE]\n\n"
@@ -213,7 +236,7 @@ async def _upload_to_data_uri(upload: UploadFile, *, param: str) -> str:
 @router.post(
     "/chat/completions", tags=[_TAG_CHAT], dependencies=[Depends(verify_api_key)]
 )
-async def chat_completions_endpoint(req: ChatCompletionRequest):
+async def chat_completions_endpoint(req: ChatCompletionRequest, request: Request):
     _validate_chat(req)
     from app.platform.config.snapshot import get_config
 
@@ -229,11 +252,47 @@ async def chat_completions_endpoint(req: ChatCompletionRequest):
             param="model",
             code="model_not_found",
         )
+    pools, oauth_models = await _available_accounts(request)
+    if not _model_available(spec, pools, oauth_models=oauth_models):
+        raise ValidationError(
+            f"Model {req.model!r} does not exist or you do not have access to it.",
+            param="model",
+            code="model_not_found",
+        )
     messages = [m.model_dump(exclude_none=True) for m in req.messages]
 
     try:
         # Dispatch by model capability.
-        if spec.is_image_edit():
+        if spec.is_oauth_chat() and req.model in oauth_models:
+            from .grok_build import chat_completions as grok_build_chat
+
+            from app.products.openai.usage_cache import (
+                sticky_key_from_chat_messages,
+                sticky_key_from_headers,
+            )
+
+            sticky = (
+                sticky_key_from_headers(request.headers)
+                or str(getattr(req, "prompt_cache_key", None) or getattr(req, "user", None) or "").strip()
+                or sticky_key_from_chat_messages(req.model, messages)
+            )
+            result = await grok_build_chat(
+                request.app.state.oauth_service,
+                model=req.model,
+                messages=messages,
+                stream=is_stream,
+                emit_think=req.reasoning_effort != "none",
+                tools=req.tools,
+                tool_choice=req.tool_choice,
+                temperature=req.temperature,
+                top_p=req.top_p,
+                reasoning_effort=req.reasoning_effort,
+                max_tokens=req.max_tokens,
+                timeout_s=cfg.get_float("chat.timeout", 120.0),
+                sticky_key=sticky,
+            )
+
+        elif spec.is_image_edit():
             from .images import edit as img_edit
 
             cfg = req.image_config or ImageConfig()
@@ -307,8 +366,10 @@ async def chat_completions_endpoint(req: ChatCompletionRequest):
                 emit_think=emit_think,
                 tools=req.tools,
                 tool_choice=req.tool_choice,
-                temperature=req.temperature or 0.8,
-                top_p=req.top_p or 0.95,
+                temperature=(
+                    req.temperature if req.temperature is not None else 0.8
+                ),
+                top_p=req.top_p if req.top_p is not None else 0.95,
             )
 
     except AppError:
@@ -321,13 +382,14 @@ async def chat_completions_endpoint(req: ChatCompletionRequest):
             exc,
         )
         if is_stream:
-            _err_msg = str(
-                exc
-            )  # capture before Python clears the except-scope variable
-
             async def _err_stream():
                 payload = orjson.dumps(
-                    {"error": {"message": _err_msg, "type": "server_error"}}
+                    {
+                        "error": {
+                            "message": "Internal server error",
+                            "type": "server_error",
+                        }
+                    }
                 ).decode()
                 yield f"event: error\ndata: {payload}\n\n"
                 yield "data: [DONE]\n\n"
@@ -361,11 +423,12 @@ async def _safe_sse_responses(stream) -> AsyncGenerator[str, None]:
             err = exc.to_dict()["error"]
         else:
             err = {
-                "message": str(exc),
+                "message": "Internal server error",
                 "type": "server_error",
                 "code": None,
                 "param": None,
             }
+            logger.exception("responses stream failed: error={}", exc)
         payload = orjson.dumps({"type": "error", **err}).decode()
         yield f"event: error\ndata: {payload}\n\n"
         yield "data: [DONE]\n\n"
@@ -374,12 +437,19 @@ async def _safe_sse_responses(stream) -> AsyncGenerator[str, None]:
 @router.post(
     "/responses", tags=[_TAG_RESPONSES], dependencies=[Depends(verify_api_key)]
 )
-async def responses_endpoint(req: ResponsesCreateRequest):
+async def responses_endpoint(req: ResponsesCreateRequest, request: Request):
     from app.platform.config.snapshot import get_config
     from app.platform.errors import ValidationError as _ValidationError
 
     spec = model_registry.get(req.model)
     if spec is None or not spec.enabled:
+        raise _ValidationError(
+            f"Model {req.model!r} does not exist or you do not have access to it.",
+            param="model",
+            code="model_not_found",
+        )
+    pools, oauth_models = await _available_accounts(request)
+    if not _model_available(spec, pools, oauth_models=oauth_models):
         raise _ValidationError(
             f"Model {req.model!r} does not exist or you do not have access to it.",
             param="model",
@@ -402,19 +472,40 @@ async def responses_endpoint(req: ResponsesCreateRequest):
     else:
         emit_think = True
 
-    from .responses import create as responses_create
+    if spec.is_oauth_chat() and req.model in oauth_models:
+        from .grok_build import responses as grok_build_responses
 
-    result = await responses_create(
-        model=req.model,
-        input_val=req.input,
-        instructions=req.instructions,
-        stream=is_stream,
-        emit_think=emit_think,
-        temperature=req.temperature or 0.8,
-        top_p=req.top_p or 0.95,
-        tools=req.tools or None,
-        tool_choice=req.tool_choice,
-    )
+        payload = req.model_dump(exclude_none=True)
+        payload["stream"] = is_stream
+        from app.products.openai.usage_cache import (
+            sticky_key_from_headers,
+            sticky_key_from_responses,
+        )
+
+        sticky = (
+            sticky_key_from_headers(request.headers)
+            or sticky_key_from_responses(payload)
+        )
+        result = await grok_build_responses(
+            request.app.state.oauth_service,
+            payload,
+            timeout_s=cfg.get_float("chat.timeout", 120.0),
+            sticky_key=sticky,
+        )
+    else:
+        from .responses import create as responses_create
+
+        result = await responses_create(
+            model=req.model,
+            input_val=req.input,
+            instructions=req.instructions,
+            stream=is_stream,
+            emit_think=emit_think,
+            temperature=req.temperature if req.temperature is not None else 0.8,
+            top_p=req.top_p if req.top_p is not None else 0.95,
+            tools=req.tools or None,
+            tool_choice=req.tool_choice,
+        )
 
     if isinstance(result, dict):
         return JSONResponse(result)
